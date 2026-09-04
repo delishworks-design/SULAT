@@ -1,13 +1,28 @@
 package com.sulat.ai.data.template
 
+import com.sulat.ai.data.model.LetterDate
 import java.text.SimpleDateFormat
 import java.util.*
 import java.util.Locale
 
 object DateSystem {
+    private fun parseDateInput(userInput: String): List<LetterDate> {
+        val dateFormat = SimpleDateFormat("MMMM d, yyyy", Locale.getDefault())
+        return userInput.split(",").mapNotNull { part ->
+            val trimmed = part.trim()
+            if (trimmed.isNotEmpty()) {
+                try {
+                    val date = dateFormat.parse(trimmed)
+                    if (date != null) LetterDate(date = date, label = trimmed) else null
+                } catch (e: Exception) {
+                    null
+                }
+            } else null
+        }
+    }
+
     // Mode A: Manual Dates - user selects one or more dates
     fun selectManualDates(userInput: String?): List<LetterDate> {
-        // Parse user-selected dates from input
         return if (userInput?.isNotEmpty() == true) {
             parseDateInput(userInput)
         } else {
@@ -30,10 +45,10 @@ object DateSystem {
         val dates = mutableListOf<LetterDate>()
         val cal = Calendar.getInstance(Locale.getDefault())
         cal.set(Calendar.YEAR, year)
-        cal.set(Calendar.MONTH, month - 1) // Calendar months are 0-based
+        cal.set(Calendar.MONTH, month - 1)
         cal.set(Calendar.DAY_OF_MONTH, 1)
 
-        while (cal.get(Calendar.MONTH) + 1 - 1 == month - 1) { // Still in target month
+        while (cal.get(Calendar.MONTH) == month - 1) {
             val dayOfWeek = cal.get(Calendar.DAY_OF_WEEK)
             if (weekdays.any { it == dayOfWeek }) {
                 val date = cal.time
@@ -64,28 +79,24 @@ object DateSystem {
         val firstOfMonth = Calendar.getInstance(Locale.getDefault())
         firstOfMonth.set(Calendar.DAY_OF_MONTH, 1)
 
-        // Find the start of the target week
         cal.set(Calendar.DAY_OF_MONTH, 1)
-        cal.roll(Calendar.DAY_OF_WEEK, -((cal[Calendar.DAY_OF_WEEK] - Calendar.MONDAY.id + 7) % 7))
+        val dayOfWeekAtStart = cal.get(Calendar.DAY_OF_WEEK)
+        val daysToMonday = (dayOfWeekAtStart - Calendar.MONDAY + 7) % 7
+        cal.add(Calendar.DAY_OF_MONTH, -daysToMonday)
         cal.add(Calendar.DAY_OF_WEEK, (week - 1) * 7)
 
-        // Process dates in that week
-        val weekStart = cal.copy()
-        cal.add(Calendar.DAY_OF_MONTH, (week - 1) * 7)
+        val weekStart = cal.clone() as Calendar
 
         for (i in 0 until 7) {
-            val currentDay = cal.get(Calendar.DAY_OF_WEEK)
+            val currentDay = weekStart.get(Calendar.DAY_OF_WEEK)
             if (weekdays.any { it == currentDay }) {
-                cal.add(Calendar.DAY_OF_MONTH, 1)
-                val date = cal.time
-                // Check if we're still in the same calendar week
+                val date = weekStart.time
                 dates.add(LetterDate(
                     date = date,
                     label = SimpleDateFormat("EEE, MMM d", Locale.getDefault()).format(date)
                 ))
-            } else {
-                cal.add(Calendar.DAY_OF_MONTH, 1)
             }
+            weekStart.add(Calendar.DAY_OF_MONTH, 1)
         }
 
         return dates
@@ -109,24 +120,19 @@ object DateSystem {
         )
     ): List<LetterDate> = selectWeekdaysDates(month, year, weekdays)
 
-    // Format date for display
     fun formatDate(date: Date): String {
         return SimpleDateFormat("MMMM d, yyyy", Locale.getDefault()).format(date)
     }
 
-    // Deduplicate and sort dates chronologically
     fun deduplicateAndSort(dates: List<LetterDate>): List<LetterDate> {
-        // Parse dates and sort
         val unique = dates.groupBy { it.label }.values.map { it.first() }
         return unique.sortedBy { it.date }
     }
 
-    // Calculate total letters: recipients × dates
     fun calculateTotalLetters(recipientCount: Int, dateCount: Int): Int {
         return recipientCount * dateCount
     }
 
-    // Calculate total envelope labels (same as letters)
     fun calculateTotalEnvelopeLabels(recipientCount: Int, dateCount: Int): Int {
         return recipientCount * dateCount
     }

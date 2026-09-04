@@ -1,11 +1,11 @@
 package com.sulat.ai
 
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.os.IBinder
-import androidx.core.app.JobIntentService
 
-class DownloadService : JobIntentService() {
+class DownloadService : Service() {
     companion object {
         const val CHANNEL_ID = "sulat_downloads"
         const val NOTIFICATION_ID = 1001
@@ -18,31 +18,27 @@ class DownloadService : JobIntentService() {
         const val BROADCAST_STOP = "com.sulat.ai.broadcast.STOP_DOWNLOAD"
 
         fun enqueueWork(context: Context, modelId: String, fileName: String, displayName: String) {
-            enqueueWork(context, DownloadService::class.java, 1,
-                Intent(context, DownloadService::class.java).apply {
-                    putExtra(EXTRA_MODEL_ID, modelId)
-                    putExtra(EXTRA_FILE_NAME, fileName)
-                    putExtra(EXTRA_DISPLAY_NAME, displayName)
-                }
-            )
+            val intent = Intent(context, DownloadService::class.java).apply {
+                putExtra(EXTRA_MODEL_ID, modelId)
+                putExtra(EXTRA_FILE_NAME, fileName)
+                putExtra(EXTRA_DISPLAY_NAME, displayName)
+            }
+            context.startService(intent)
         }
 
         fun stopWork(context: Context) {
-            enqueueWork(context, DownloadService::class.java, 2, Intent(context, DownloadService::class.java).apply {
+            val intent = Intent(context, DownloadService::class.java).apply {
                 action = ACTION_STOP
-            })
+            }
+            context.startService(intent)
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        return START_STICKY
-    }
-
-    override fun onHandleIntent(intent: Intent?) {
         when (intent?.action) {
             ACTION_START -> {
-                val modelId = intent.getStringExtra(EXTRA_MODEL_ID) ?: return
-                val fileName = intent.getStringExtra(EXTRA_FILE_NAME) ?: return
+                val modelId = intent.getStringExtra(EXTRA_MODEL_ID) ?: return START_NOT_STICKY
+                val fileName = intent.getStringExtra(EXTRA_FILE_NAME) ?: return START_NOT_STICKY
                 val displayName = intent.getStringExtra(EXTRA_DISPLAY_NAME) ?: modelId
                 // Handle download start
             }
@@ -50,6 +46,7 @@ class DownloadService : JobIntentService() {
                 // Handle stop
             }
         }
+        return START_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null

@@ -1,79 +1,93 @@
 package com.sulat.ai.print
 
 import android.content.Context
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.pdf.PdfDocument
+import android.os.ParcelFileDescriptor
+import android.print.PrintAttributes
+import android.print.PrintDocumentAdapter
 import android.print.PrintManager
 import com.sulat.ai.data.model.LetterDraft
 import com.sulat.ai.data.model.Recipient
 import com.sulat.ai.data.model.SenderProfile
+import java.io.File
+import java.io.FileOutputStream
 
 object PrintHelper {
-    // Print document using Android Print Framework
+
+    enum class PaperSize { A4, Legal, LongBond, Letter }
+
     fun printDocument(
         context: Context,
         draft: LetterDraft,
         recipient: Recipient,
         sender: SenderProfile,
-        paperSize: PrintHelper.PaperSize
+        paperSize: PaperSize
     ) {
         val printManager = context.getSystemService(Context.PRINT_SERVICE) as PrintManager
         val jobName = "Sulat-Letter-${recipient.name}"
 
         val printAdapter = object : PrintDocumentAdapter() {
-            override fun onLayout(
-                cancel: Boolean?,
-                receivedWidth: Int,
-                oldParams: android.print.PrintAttributes?
+            override fun onWrite(
+                pages: android.graphics.pdf.PdfDocument.PageRange[],
+                destination: ParcelFileDescriptor,
+                cancellationSignal: android.os.CancellationSignal?,
+                callback: WriteResultCallback?
             ) {
-                // Create print document
-                val pdfBuilder = PdfDocument.Builder()
+                val pdfDocument = PdfDocument()
+                val pageInfo = PdfDocument.PageInfo.Builder(612, 792, 1).create()
+                val page = pdfDocument.startPage(pageInfo)
 
-                // Add page with letter content
-                val page = pdfBuilder.addPage(
-                    android.print.PrintAttributes.PAGE_SIZE_LETTER,
-                    android.print.PrintAttributes.ORIENTATION_PORTRAIT
-                )
+                val canvas: Canvas = page.canvas
+                val paint = Paint()
 
-                // Write letter content to PDF
-                val canvas = page.beginPage(android.graphics.Canvas())
-                val paint = android.graphics.Paint()
+                paint.textSize = 14f
+                canvas.drawText("Kapatid na ${recipient.name}", 50f, 80f, paint)
+                canvas.drawText(recipient.position, 50f, 100f, paint)
+                canvas.drawText(recipient.organization, 50f, 120f, paint)
 
-                // Draw recipient block
-                val recipientText = "Kapatid na ${recipient.name}"
-                canvas.drawText(recipientText, 50f, 100f, paint)
+                paint.textSize = 12f
+                canvas.drawText("March 29, 2026", 50f, 160f, paint)
 
-                // Draw date
-                val dateText = "March 29, 2026"
-                canvas.drawText(dateText, 50f, 140f, paint)
+                paint.textSize = 11f
+                val bodyLines = draft.body.split("\n")
+                var y = 200f
+                for (line in bodyLines) {
+                    canvas.drawText(line, 50f, y, paint)
+                    y += 16f
+                }
 
-                // Draw body
-                canvas.drawText("Letter body content...", 50f, 200f, paint)
+                pdfDocument.finishPage(page)
 
-                page.endPage()
-
-                // Write PDF document
-                pdfBuilder.writeToParcel(
-                    android.os.Parcel.obtain().apply {
-                        writeString("Sulat Letter Print")
+                try {
+                    FileOutputStream(destination.fileDescriptor).use { out ->
+                        pdfDocument.writeTo(out)
                     }
-                )
+                    callback?.onWriteFinished(arrayOf(PageRange.ALL_PAGES))
+                } catch (e: Exception) {
+                    callback?.onWriteFailed(e.message)
+                } finally {
+                    pdfDocument.close()
+                }
+            }
 
-                // Commit print job
-                printManager.print(
-                    jobName,
-                    printAdapter,
-                    android.print.PrintAttributes.Builder().apply {
-                        addMediaSize(android.print.PrintAttributes.MediaSize.STANDARD_LETTER)
-                        apply {
-                            colorMode = android.print.PrintAttributes.COLOR_MODE_COLOR
-                            duplexMode = android.print.PrintAttributes.DUPLEX_NONE
-                        }
-                    }.apply { cancel = false }
+            override fun onLayout(
+                oldAttributes: PrintAttributes?,
+                newAttributes: PrintAttributes?,
+                cancellationSignal: android.os.CancellationSignal?,
+                callback: LayoutResultCallback?,
+                extras: android.os.Bundle?
+            ) {
+                callback?.onLayoutFinished(
+                    PrintDocumentInfo.Builder(jobName)
+                        .setPageCount(1)
+                        .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
+                        .build()
                 )
             }
         }
 
         printManager.print(jobName, printAdapter, null)
     }
-
-    enum class PaperSize { A4, Legal, LongBond, Letter }
 }

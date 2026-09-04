@@ -3,11 +3,12 @@ package com.sulat.ai.document.renderer
 import com.sulat.ai.data.model.LetterDraft
 import com.sulat.ai.data.model.Recipient
 import com.sulat.ai.data.model.SenderProfile
+import com.sulat.ai.document.PaperSize
 import java.io.File
+import java.text.SimpleDateFormat
 
 class EnvelopeLabelRenderer {
 
-    // Render individual envelope label
     fun renderEnvelopeLabel(
         sender: SenderProfile,
         recipient: Recipient,
@@ -19,7 +20,6 @@ class EnvelopeLabelRenderer {
 
         val sb = StringBuilder()
 
-        // Sender block with proper hierarchy
         sb.append("${sender.name}\n")
         if (sender.address.isNotEmpty()) {
             sb.append("${sender.address}\n")
@@ -34,7 +34,6 @@ class EnvelopeLabelRenderer {
             sb.append("Contact: ${sender.contactNumber}\n")
         }
 
-        // Recipient block - visually stronger
         sb.append("\n")
         sb.append("Bro. ${recipient.name}\n")
         sb.append("${recipient.position}\n")
@@ -44,7 +43,6 @@ class EnvelopeLabelRenderer {
         return sb.toString()
     }
 
-    // Render batch of envelope labels
     fun renderBatchEnvelopeLabels(
         senders: List<SenderProfile>,
         recipients: List<Recipient>,
@@ -61,11 +59,9 @@ class EnvelopeLabelRenderer {
         return results
     }
 
-    // Validate envelope label format
     fun validateEnvelopeFormat(text: String): Boolean {
-        // Check that envelope has required sections
-        return text.contains("Bro.") && 
-               text.contains("Position") && 
+        return text.contains("Bro.") &&
+               text.contains("Position") &&
                text.contains("Organization")
     }
 }
