@@ -19,12 +19,12 @@ object DateSystem {
     fun selectWeekdaysDates(
         month: Int,
         year: Int,
-        weekdays: List<DayOfWeek> = listOf(
-            DayOfWeek.MONDAY,
-            DayOfWeek.TUESDAY,
-            DayOfWeek.WEDNESDAY,
-            DayOfWeek.THURSDAY,
-            DayOfWeek.FRIDAY
+        weekdays: List<Int> = listOf(
+            Calendar.MONDAY,
+            Calendar.TUESDAY,
+            Calendar.WEDNESDAY,
+            Calendar.THURSDAY,
+            Calendar.FRIDAY
         )
     ): List<LetterDate> {
         val dates = mutableListOf<LetterDate>()
@@ -35,7 +35,7 @@ object DateSystem {
 
         while (cal.get(Calendar.MONTH) + 1 - 1 == month - 1) { // Still in target month
             val dayOfWeek = cal.get(Calendar.DAY_OF_WEEK)
-            if (weekdays.any { it.id == dayOfWeek }) {
+            if (weekdays.any { it == dayOfWeek }) {
                 val date = cal.time
                 dates.add(LetterDate(
                     date = date,
@@ -51,12 +51,12 @@ object DateSystem {
     // Mode C: Specific Week - 1st week, 2nd week, 3rd week, 4th week, 5th week + weekdays
     fun selectSpecificWeekDates(
         week: Int,
-        weekdays: List<DayOfWeek> = listOf(
-            DayOfWeek.MONDAY,
-            DayOfWeek.TUESDAY,
-            DayOfWeek.WEDNESDAY,
-            DayOfWeek.THURSDAY,
-            DayOfWeek.FRIDAY
+        weekdays: List<Int> = listOf(
+            Calendar.MONDAY,
+            Calendar.TUESDAY,
+            Calendar.WEDNESDAY,
+            Calendar.THURSDAY,
+            Calendar.FRIDAY
         )
     ): List<LetterDate> {
         val dates = mutableListOf<LetterDate>()
@@ -66,7 +66,7 @@ object DateSystem {
 
         // Find the start of the target week
         cal.set(Calendar.DAY_OF_MONTH, 1)
-        cal.roll(Calendar.DAY_OF_WEEK, -((cal[Calendar.DAY_OF_WEEK] - DayOfWeek.MONDAY.id + 7) % 7))
+        cal.roll(Calendar.DAY_OF_WEEK, -((cal[Calendar.DAY_OF_WEEK] - Calendar.MONDAY.id + 7) % 7))
         cal.add(Calendar.DAY_OF_WEEK, (week - 1) * 7)
 
         // Process dates in that week
@@ -75,7 +75,7 @@ object DateSystem {
 
         for (i in 0 until 7) {
             val currentDay = cal.get(Calendar.DAY_OF_WEEK)
-            if (weekdays.any { it.id == currentDay }) {
+            if (weekdays.any { it == currentDay }) {
                 cal.add(Calendar.DAY_OF_MONTH, 1)
                 val date = cal.time
                 // Check if we're still in the same calendar week
@@ -100,12 +100,12 @@ object DateSystem {
     fun selectWholeMonthDates(
         month: Int,
         year: Int,
-        weekdays: List<DayOfWeek> = listOf(
-            DayOfWeek.MONDAY,
-            DayOfWeek.TUESDAY,
-            DayOfWeek.WEDNESDAY,
-            DayOfWeek.THURSDAY,
-            DayOfWeek.FRIDAY
+        weekdays: List<Int> = listOf(
+            Calendar.MONDAY,
+            Calendar.TUESDAY,
+            Calendar.WEDNESDAY,
+            Calendar.THURSDAY,
+            Calendar.FRIDAY
         )
     ): List<LetterDate> = selectWeekdaysDates(month, year, weekdays)
 

@@ -29,9 +29,9 @@ object WritingAssistant {
                 tagalogScore += 0.3
             }
             if (tagalogPatterns.keys.any { word.contains(it) }) {
-                tagalogScore += tagalogPatterns[it]!!
+                tagalogScore += tagalogPatterns.getOrDefault(it, 0.0)
             }
-            if (word in ["the", "and", "to", "of", "a", "in", "is", "it"]) {
+            if (word == "the" || word == "and" || word == "to" || word == "of" || word == "a" || word == "in" || word == "is" || word == "it") {
                 englishScore += 0.2
             }
         }
