@@ -85,7 +85,8 @@ object PrintHelper {
                     PrintDocumentInfo.Builder(jobName)
                         .setPageCount(1)
                         .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
-                        .build()
+                        .build(),
+                    true
                 )
             }
         }

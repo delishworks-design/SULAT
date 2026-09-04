@@ -28,8 +28,8 @@ object WritingAssistant {
                 // Contains non-ASCII, could be Filipino
                 tagalogScore += 0.3
             }
-            if (tagalogPatterns.keys.any { word.contains(it) }) {
-                tagalogScore += tagalogPatterns.getOrDefault(it, 0.0)
+            if (tagalogPatterns.keys.any { key -> word.contains(key) }) {
+                tagalogScore += tagalogPatterns.filterKeys { key -> word.contains(key) }.values.sum()
             }
             if (word == "the" || word == "and" || word == "to" || word == "of" || word == "a" || word == "in" || word == "is" || word == "it") {
                 englishScore += 0.2
