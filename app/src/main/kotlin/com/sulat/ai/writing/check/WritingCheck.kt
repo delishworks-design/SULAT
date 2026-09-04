@@ -14,8 +14,8 @@ object WritingCheck {
         val grammarResult = GrammarChecker.checkGrammar(draft.body)
 
         // 3. Summarize issues
-        val spellingIssues = spellResult.misspelled.joinToString(", ") : "none"
-        val grammarSuggestions = grammarResult.issues.joinToString("\n") : "none"
+        val spellingIssues = spellResult.misspelled.joinToString(", ") ?: "none"
+        val grammarSuggestions = grammarResult.issues.joinToString("\n") ?: "none"
 
         // 4. Calculate confidence
         val highConfidenceCorrections = spellResult.misspelled.size
