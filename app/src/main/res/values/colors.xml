@@ -6,4 +6,5 @@
     <color name="muted_text">#6B6B6B</color>
     <color name="divider_line">#E0E0E0</color>
     <color name="card_background">#FFFFFF</color>
+    <color name="ic_launcher_background">#2D5A27</color>
 </resources>
