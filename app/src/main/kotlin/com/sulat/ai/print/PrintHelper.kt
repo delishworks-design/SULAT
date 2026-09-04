@@ -5,8 +5,10 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.pdf.PdfDocument
 import android.os.ParcelFileDescriptor
+import android.print.PageRange
 import android.print.PrintAttributes
 import android.print.PrintDocumentAdapter
+import android.print.PrintDocumentInfo
 import android.print.PrintManager
 import com.sulat.ai.data.model.LetterDraft
 import com.sulat.ai.data.model.Recipient
@@ -30,7 +32,7 @@ object PrintHelper {
 
         val printAdapter = object : PrintDocumentAdapter() {
             override fun onWrite(
-                pages: android.graphics.pdf.PdfDocument.PageRange[],
+                pages: Array<PageRange>,
                 destination: ParcelFileDescriptor,
                 cancellationSignal: android.os.CancellationSignal?,
                 callback: WriteResultCallback?
