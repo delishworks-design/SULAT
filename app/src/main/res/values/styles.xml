@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="NormalTheme" parent="Theme.AppCompat.Light.DarkActionBar">
+        <item name="colorPrimary">#2D5A27</item>
+        <item name="colorPrimaryDark">#1A3D1A</item>
+        <item name="colorAccent">#3D8B40</item>
+    </style>
+
+    <style name="AppTheme.NoActionBar">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+    </style>
+
+    <style name="AppTheme.AppBarOverlay" parent="Theme.AppCompat.Light.NoActionBar"/>
+
+    <style name="AppTheme.PopupOverlay" parent="Theme.AppCompat.Light.NoActionBar"/></resources>

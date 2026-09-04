@@ -19,7 +19,6 @@
             android:grantUriPermissions="true">
             <meta-data
                 android:name="android.support.FILE_PROVIDER_PATHS"
-                android:xmlns:tools="http://www.w3.org/1999/xhtml"
                 android:resource="@xml/file_paths"/>
         </provider>
 
