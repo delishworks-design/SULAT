@@ -1,33 +1,17 @@
-# Gradle cache
+# Gradle cache and build outputs
 .gradle/
-**/gradle-wrapper/gradle-wrapper.zip
-**/gradle-wrapper/gradle-wrapper.properties
+build/
+**/build/
 
 # Local properties
 local.properties
 
-# Build outputs
-build/
-**/build/
-
-# Idea/IntelliJ
+# IDE
 *.iml
 .idea/
 
 # OS
 .DS_Store
 
-# Gradle wrapper large files
-gradle/wrapper/lib/
-
-# Kotlin
-**/*.jar
-
-# APK outputs
-**/*.apk
-
-# External SDK
-/system/
-
-# Termux
-/home/
+# WARS - do NOT ignore wrapper files
+# gradlew, gradlew.bat, gradle/wrapper/* must be tracked
