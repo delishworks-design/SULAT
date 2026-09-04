@@ -1,0 +1,14 @@
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+dependencyResolutionManagement {
+    repositories.google()
+    repositories.mavenCentral()
+}
+
+rootProject.name = "Sulat"
+include ":app"

@@ -1,0 +1,4 @@
+-keep class com.sulat.ai.** { *; }
+-keepclassmembers class * { @androidx.annotation.* <methods>; }
+-keepclassmembers class * { @com.google.android.gms.common.annotation.* <methods>; }
+-keep @com.google.android.gms.common.annotation.* class *;

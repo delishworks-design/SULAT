@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="warm_white">#FAF9F6</color>
+    <color name="deep_green">#2D5A27</color>
+    <color name="dark_text">#2D2D2D</color>
+    <color name="muted_text">#6B6B6B</color>
+    <color name=" divider_line">#E0E0E0</color>
+    <color name="card_background">#FFFFFF</color>
