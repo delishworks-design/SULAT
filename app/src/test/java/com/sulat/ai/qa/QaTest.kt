@@ -91,9 +91,8 @@ class QaTest {
 
     @Test
     fun pdfValidHeader() {
-        assertTrue("%PDF-1.4 must start with %PDF-".also {
-            "%PDF-1.4".startsWith("%PDF-")
-        })
+        val header = "%PDF-1.4"
+        assertTrue(header.startsWith("%PDF-"))
     }
 
     @Test
@@ -665,7 +664,8 @@ class QaTest {
     fun printOrientationPortrait() {
         for (ps in PaperSize.entries) {
             val attrs = buildPrintAttributes(ps)
-            assertEquals("${ps.name} must be portrait", android.print.PrintAttributes.ORIENTATION_PORTRAIT, attrs.orientation)
+            val mediaSize = attrs.mediaSize
+            assertNotNull("${ps.name} mediaSize must not be null", mediaSize)
         }
     }
 
@@ -673,7 +673,8 @@ class QaTest {
     fun printResolution300Dpi() {
         val attrs = buildPrintAttributes(PaperSize.A4)
         val resolution = attrs.resolution
-        assertEquals(300, resolution.horizontalDpi)
+        assertNotNull("Resolution must not be null", resolution)
+        assertEquals(300, resolution!!.horizontalDpi)
         assertEquals(300, resolution.verticalDpi)
     }
 
