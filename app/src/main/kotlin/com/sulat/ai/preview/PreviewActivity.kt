@@ -13,6 +13,7 @@ import com.sulat.ai.data.persistence.PersistenceManager
 import com.sulat.ai.document.PaperSize
 import com.sulat.ai.document.renderer.LetterTemplateEngine
 import com.sulat.ai.document.renderer.PdfContentCalculator
+import com.sulat.ai.print.PrintHelper
 
 /**
  * Activity that renders a letter preview using the same deterministic pipeline as PDF.
@@ -27,6 +28,8 @@ class PreviewActivity : Activity() {
     }
 
     private var calculator: PreviewCalculator? = null
+    private var currentDraft: LetterDraft? = null
+    private var currentPaperSize: PaperSize = PaperSize.A4
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -52,6 +55,9 @@ class PreviewActivity : Activity() {
         } catch (_: IllegalArgumentException) {
             PaperSize.A4
         }
+
+        currentDraft = draft
+        currentPaperSize = paperSize
 
         val layout = try {
             val engine = LetterTemplateEngine()
@@ -95,7 +101,17 @@ class PreviewActivity : Activity() {
             Toast.makeText(this, "Share — coming in FIX 6C", Toast.LENGTH_SHORT).show()
         }
         findViewById<Button>(R.id.btnPrint).setOnClickListener {
-            Toast.makeText(this, "Print — coming in FIX 6D", Toast.LENGTH_SHORT).show()
+            val draft = currentDraft
+            if (draft == null) {
+                Toast.makeText(this, "No letter loaded to print.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val result = PrintHelper.printDocument(this, draft, currentPaperSize)
+            if (!result.success) {
+                Toast.makeText(this, "Print failed: ${result.error}", Toast.LENGTH_LONG).show()
+            } else {
+                Toast.makeText(this, "Print job sent", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
