@@ -90,9 +90,9 @@ class PdfContentCalculatorTest {
         val calculator = PdfContentCalculator(layout)
         val plan = calculator.plan()
         val allText = plan.pages.flatMap { it.lines }.map { it.text }.joinToString(" ")
-        assertTrue(allText.contains("JUAN"))
-        assertTrue(allText.contains("PEDRO"))
-        assertTrue(allText.contains("JOSE"))
+        assertTrue(allText.contains("Juan"))
+        assertTrue(allText.contains("Pedro"))
+        assertTrue(allText.contains("Jose"))
     }
 
     @Test
