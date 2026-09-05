@@ -58,6 +58,8 @@
     <string name="no_dates_selected">No dates have been selected.</string>
     <string name="complete_sender_profile_before_generating">Please complete your Sender Profile before generating the document.</string>
     <string name="no_letters_yet">No letters yet</string>
+    <string name="saved_letters">Saved Letters</string>
+    <string name="envelope_labels">Envelope Labels</string>
     <string name="create_your_first_letter_to_get_started">Create your first letter to get started.</string>
     <string name="manage_history">Manage History</string>
     <string name="clear_history">Clear History</string>

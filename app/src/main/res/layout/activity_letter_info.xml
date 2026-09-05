@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/warm_white">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="12dp"
+        android:background="@color/card_background"
+        android:elevation="4dp"
+        android:gravity="center_vertical">
+
+        <Button
+            android:id="@+id/btnBack"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:text="Back"
+            android:textColor="@color/deep_green" />
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Letter Information"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="@color/deep_green"
+            android:gravity="center" />
+
+        <View
+            android:layout_width="48dp"
+            android:layout_height="1dp" />
+    </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Step 2: Letter Information"
+        android:textSize="12sp"
+        android:textColor="@color/muted_text"
+        android:paddingHorizontal="16dp"
+        android:paddingTop="12dp"
+        android:paddingBottom="4dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Subject"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:textColor="@color/dark_text"
+            android:layout_marginBottom="4dp" />
+
+        <EditText
+            android:id="@+id/etSubject"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:hint="Letter subject"
+            android:textSize="16sp"
+            android:paddingHorizontal="8dp"
+            android:background="@color/card_background"
+            android:layout_marginBottom="24dp"
+            android:inputType="text" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Greeting"
+            android:textSize="14sp"
+            android:textStyle="bold"
+            android:textColor="@color/dark_text"
+            android:layout_marginBottom="4dp" />
+
+        <EditText
+            android:id="@+id/etGreeting"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:hint="e.g. Dear Bro. Eduardo V. Manalo,"
+            android:textSize="16sp"
+            android:paddingHorizontal="8dp"
+            android:background="@color/card_background"
+            android:layout_marginBottom="8dp"
+            android:inputType="text" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Tip: Use the recipient's actual name. The system will handle formal prefixes (KA., BRO., SIS., etc.)"
+            android:textSize="11sp"
+            android:textColor="@color/muted_text"
+            android:fontFamily="sans-serif-light" />
+    </LinearLayout>
+
+    <Button
+        android:id="@+id/btnContinue"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:layout_margin="12dp"
+        android:text="Continue to Date Selection"
+        android:textColor="@color/warm_white"
+        android:background="@color/deep_green" />
+</LinearLayout>

@@ -25,6 +25,17 @@ object PersistenceManager {
         return File(context.filesDir, TEMP_FILE_NAME)
     }
 
+    // ── Create new draft ──────────────────────────────────────────────────
+
+    fun createDraft(context: Context): LetterDraft {
+        val draft = LetterDraft(
+            createdTime = System.currentTimeMillis(),
+            modifiedTime = System.currentTimeMillis()
+        )
+        saveDraft(context, draft)
+        return draft
+    }
+
     // ── Save (create or update) ──────────────────────────────────────────
 
     fun saveDraft(context: Context, draft: LetterDraft) {

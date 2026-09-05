@@ -7,48 +7,32 @@ import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.Toast
 import com.sulat.ai.data.persistence.PersistenceManager
-import com.sulat.ai.preview.EnvelopePreviewActivity
-import com.sulat.ai.preview.PreviewActivity
+import com.sulat.ai.workflow.CreateLetterActivity
+import com.sulat.ai.workflow.SavedLettersActivity
 
 class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        val container = findViewById<LinearLayout>(R.id.rootContainer)
-
-        val previewButton = container.findViewById<Button>(R.id.btnPreview)
-        if (previewButton != null) {
-            previewButton.setOnClickListener { openPreview() }
+        findViewById<Button>(R.id.btnCreateNew).setOnClickListener {
+            val draft = PersistenceManager.createDraft(this)
+            val intent = Intent(this, CreateLetterActivity::class.java)
+            intent.putExtra(CreateLetterActivity.EXTRA_DRAFT_ID, draft.id)
+            startActivity(intent)
         }
 
-        val envelopeButton = container.findViewById<Button>(R.id.btnEnvelope)
-        if (envelopeButton != null) {
-            envelopeButton.setOnClickListener { openEnvelope() }
+        findViewById<Button>(R.id.btnSavedLetters).setOnClickListener {
+            startActivity(Intent(this, SavedLettersActivity::class.java))
         }
-    }
 
-    private fun openPreview() {
-        val drafts = PersistenceManager.loadDrafts(this)
-        val draft = drafts.firstOrNull()
-        if (draft == null) {
-            Toast.makeText(this, "No letters to preview. Create a letter first.", Toast.LENGTH_SHORT).show()
-            return
+        findViewById<Button>(R.id.btnEnvelopes).setOnClickListener {
+            val drafts = PersistenceManager.loadDrafts(this)
+            if (drafts.isEmpty()) {
+                Toast.makeText(this, "No letters available. Create a letter first.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            startActivity(Intent(this, SavedLettersActivity::class.java))
         }
-        val intent = Intent(this, PreviewActivity::class.java)
-        intent.putExtra(PreviewActivity.EXTRA_DRAFT_ID, draft.id)
-        startActivity(intent)
-    }
-
-    private fun openEnvelope() {
-        val drafts = PersistenceManager.loadDrafts(this)
-        val draft = drafts.firstOrNull()
-        if (draft == null) {
-            Toast.makeText(this, "No letters available. Create a letter first.", Toast.LENGTH_SHORT).show()
-            return
-        }
-        val intent = Intent(this, EnvelopePreviewActivity::class.java)
-        intent.putExtra(EnvelopePreviewActivity.EXTRA_DRAFT_ID, draft.id)
-        startActivity(intent)
     }
 }
