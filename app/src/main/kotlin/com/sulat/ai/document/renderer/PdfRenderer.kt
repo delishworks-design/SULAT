@@ -72,7 +72,7 @@ class PdfRenderer {
 
         for (line in renderPage.lines) {
             val style = line.role.style
-            paint.textSize = style.fontSizePt
+            paint.textSize = style.fontSizePt.toFloat()
             paint.isFakeBoldText = style.isBold
 
             if (style.isItalic) {
@@ -86,7 +86,7 @@ class PdfRenderer {
             canvas.drawText(
                 line.text,
                 layout.page.marginLeftPt.toFloat(),
-                line.yPt.toFloat() + style.fontSizePt,
+                (line.yPt + style.fontSizePt).toFloat(),
                 paint
             )
         }

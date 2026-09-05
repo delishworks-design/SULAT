@@ -46,7 +46,7 @@ class PdfContentCalculator(
             cursorY = page.marginTopPt
         }
 
-        fun addSpacer(spacerPt: Double = PdfTextRole.SPACER.style.fontSizePt.toDouble()) {
+        fun addSpacer(spacerPt: Double = PdfTextRole.SPACER.style.fontSizePt) {
             if (!checkSpace(spacerPt)) newPage()
             cursorY += spacerPt
         }
