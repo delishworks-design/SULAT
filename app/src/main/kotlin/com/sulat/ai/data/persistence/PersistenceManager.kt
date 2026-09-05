@@ -10,6 +10,7 @@ import org.json.JSONObject
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Locale
+import java.util.UUID
 
 object PersistenceManager {
     private const val TAG = "PersistenceManager"
@@ -78,7 +79,7 @@ object PersistenceManager {
         writeDrafts(context, emptyList())
     }
 
-    // ── JSON write (atomic) ───────────────────────────────────────────────
+    // ── JSON write (safe replacement) ─────────────────────────────────────
 
     private fun writeDrafts(context: Context, drafts: List<LetterDraft>) {
         val root = JSONObject()
@@ -91,11 +92,36 @@ object PersistenceManager {
         val tempFile = getTempFile(context)
         val dataFile = getDataFile(context)
         try {
+            // Step 1: Write complete JSON to temp file
             tempFile.writeText(root.toString(), Charsets.UTF_8)
-            tempFile.renameTo(dataFile)
+            tempFile.outputStream().flush()
+            tempFile.outputStream().close()
+
+            // Step 2: Delete destination if it exists
+            if (dataFile.exists()) {
+                dataFile.delete()
+            }
+
+            // Step 3: Rename temp to destination
+            val renamed = tempFile.renameTo(dataFile)
+
+            if (!renamed) {
+                // Fallback: copy content then delete temp
+                Log.w(TAG, "renameTo failed, using copy fallback")
+                tempFile.copyTo(dataFile, overwrite = true)
+                tempFile.delete()
+            }
+
+            // Step 4: Verify destination exists and has content
+            if (!dataFile.exists() || dataFile.length() == 0L) {
+                Log.e(TAG, "Data file missing or empty after write")
+                throw IllegalStateException("Failed to persist data to ${dataFile.absolutePath}")
+            }
+
         } catch (e: Exception) {
             Log.e(TAG, "Failed to write drafts: ${e.message}", e)
             tempFile.delete()
+            throw e
         }
     }
 
@@ -165,11 +191,16 @@ object PersistenceManager {
     internal fun jsonToDraft(json: JSONObject): LetterDraft {
         val fmt = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZ", Locale.US)
 
+        val draftId = json.optString("id", "")
+        val safeDraftId = if (draftId.isNotBlank()) draftId else UUID.randomUUID().toString()
+
         val recipientsArray = json.optJSONArray("recipients") ?: JSONArray()
         val recipients = (0 until recipientsArray.length()).map { i ->
             val r = recipientsArray.getJSONObject(i)
+            val rid = r.optString("id", "")
+            val safeRid = if (rid.isNotBlank()) rid else UUID.randomUUID().toString()
             com.sulat.ai.data.model.Recipient(
-                id = r.optString("id", ""),
+                id = safeRid,
                 name = r.optString("name", ""),
                 position = r.optString("position", ""),
                 organization = r.optString("organization", ""),
@@ -201,7 +232,7 @@ object PersistenceManager {
         )
 
         return LetterDraft(
-            id = json.optString("id", ""),
+            id = safeDraftId,
             recipients = recipients,
             dates = dates,
             sender = sender,
