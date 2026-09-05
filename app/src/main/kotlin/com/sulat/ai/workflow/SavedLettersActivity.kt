@@ -89,20 +89,38 @@ class SavedLettersActivity : Activity() {
         val tvRecipients = view.findViewById<TextView>(R.id.tvRecipients)
         val tvDate = view.findViewById<TextView>(R.id.tvDate)
 
-        val displayTitle = if (draft.subject.isNotBlank()) draft.subject else "Untitled Letter"
+        val displayTitle = try {
+            if (draft.subject.isNotBlank()) draft.subject else "Untitled Letter"
+        } catch (e: Exception) {
+            "Untitled Letter"
+        }
+
         tvTitle.text = displayTitle
 
-        val recipientSummary = if (draft.recipients.isNotEmpty()) {
-            val names = draft.recipients.take(3).map { it.name }
-            val suffix = if (draft.recipients.size > 3) " +${draft.recipients.size - 3} more" else ""
-            names.joinToString(", ") + suffix
-        } else {
+        val recipientSummary = try {
+            if (draft.recipients.isNotEmpty()) {
+                val validRecipients = draft.recipients.filter { it.name.isNotBlank() }
+                if (validRecipients.isEmpty()) {
+                    "No recipient"
+                } else {
+                    val names = validRecipients.take(3).map { it.name }
+                    val suffix = if (validRecipients.size > 3) " +${validRecipients.size - 3} more" else ""
+                    names.joinToString(", ") + suffix
+                }
+            } else {
+                "No recipients"
+            }
+        } catch (e: Exception) {
             "No recipients"
         }
         tvRecipients.text = recipientSummary
 
         val dateFormat = SimpleDateFormat("MMM d, yyyy", Locale.US)
-        tvDate.text = dateFormat.format(Date(draft.modifiedTime))
+        tvDate.text = try {
+            dateFormat.format(Date(draft.modifiedTime))
+        } catch (e: Exception) {
+            ""
+        }
 
         view.findViewById<Button>(R.id.btnOpen).setOnClickListener {
             openForEditing(draft.id)

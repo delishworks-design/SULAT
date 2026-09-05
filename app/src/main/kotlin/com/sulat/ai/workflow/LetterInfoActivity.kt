@@ -84,6 +84,17 @@ class LetterInfoActivity : Activity() {
         finish()
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString("draftId", draftId)
+    }
+
+    override fun onRestoreInstanceState(savedInstanceState: Bundle) {
+        super.onRestoreInstanceState(savedInstanceState)
+        val restoredId = savedInstanceState.getString("draftId", "")
+        if (restoredId.isNotBlank()) draftId = restoredId
+    }
+
     override fun onPause() {
         super.onPause()
         val draft = PersistenceManager.getDraft(this, draftId)

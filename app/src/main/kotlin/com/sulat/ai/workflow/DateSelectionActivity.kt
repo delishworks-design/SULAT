@@ -220,20 +220,34 @@ class DateSelectionActivity : Activity() {
         }
     }
 
+    private fun saveCurrentState() {
+        val draft = PersistenceManager.getDraft(this, draftId) ?: return
+        val updated = draft.copy(
+            dates = DateSystem.deduplicateAndSort(selectedDates),
+            modifiedTime = System.currentTimeMillis()
+        )
+        PersistenceManager.saveDraft(this, updated)
+    }
+
     private fun saveAndFinish() {
-        val draft = PersistenceManager.getDraft(this, draftId)
-        if (draft != null) {
-            val updated = draft.copy(
-                dates = DateSystem.deduplicateAndSort(selectedDates),
-                modifiedTime = System.currentTimeMillis()
-            )
-            PersistenceManager.saveDraft(this, updated)
-        }
+        saveCurrentState()
         finish()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString("draftId", draftId)
+        outState.putStringArrayList("dateLabels", ArrayList(selectedDates.map { it.label }))
+    }
+
+    override fun onRestoreInstanceState(savedInstanceState: Bundle) {
+        super.onRestoreInstanceState(savedInstanceState)
+        val restoredId = savedInstanceState.getString("draftId", "")
+        if (restoredId.isNotBlank()) draftId = restoredId
     }
 
     override fun onPause() {
         super.onPause()
-        saveAndFinish()
+        saveCurrentState()
     }
 }
