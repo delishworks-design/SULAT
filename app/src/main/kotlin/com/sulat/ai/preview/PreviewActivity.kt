@@ -1,6 +1,8 @@
 package com.sulat.ai.preview
 
 import android.app.Activity
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
@@ -14,6 +16,7 @@ import com.sulat.ai.document.PaperSize
 import com.sulat.ai.document.renderer.LetterTemplateEngine
 import com.sulat.ai.document.renderer.PdfContentCalculator
 import com.sulat.ai.print.PrintHelper
+import com.sulat.ai.share.SaveHelper
 import com.sulat.ai.share.ShareHelper
 
 /**
@@ -26,11 +29,13 @@ class PreviewActivity : Activity() {
     companion object {
         const val EXTRA_DRAFT_ID = "extra_draft_id"
         const val EXTRA_PAPER_SIZE = "extra_paper_size"
+        private const val SAVE_REQUEST_CODE = 1001
     }
 
     private var calculator: PreviewCalculator? = null
     private var currentDraft: LetterDraft? = null
     private var currentPaperSize: PaperSize = PaperSize.A4
+    private var pendingSaveFile: java.io.File? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -96,7 +101,7 @@ class PreviewActivity : Activity() {
             finish()
         }
         findViewById<Button>(R.id.btnSave).setOnClickListener {
-            Toast.makeText(this, "Save PDF — coming in FIX 6B", Toast.LENGTH_SHORT).show()
+            savePdf()
         }
         findViewById<Button>(R.id.btnShare).setOnClickListener {
             val draft = currentDraft
@@ -121,6 +126,58 @@ class PreviewActivity : Activity() {
             } else {
                 Toast.makeText(this, "Print job sent", Toast.LENGTH_SHORT).show()
             }
+        }
+    }
+
+    private fun savePdf() {
+        val draft = currentDraft
+        if (draft == null) {
+            Toast.makeText(this, "No letter loaded to save.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        Toast.makeText(this, "Generating PDF...", Toast.LENGTH_SHORT).show()
+
+        val result = SaveHelper.generatePdf(this, draft, currentPaperSize)
+        if (!result.success) {
+            Toast.makeText(this, "Failed to generate PDF: ${result.error}", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        pendingSaveFile = result.pdfFile
+        val filename = SaveHelper.buildFilename(draft)
+
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "application/pdf"
+            putExtra(Intent.EXTRA_TITLE, filename)
+        }
+        startActivityForResult(intent, SAVE_REQUEST_CODE)
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+
+        if (requestCode == SAVE_REQUEST_CODE) {
+            if (resultCode == RESULT_OK && data?.data != null) {
+                val uri = data.data!!
+                val file = pendingSaveFile
+                if (file != null && file.exists()) {
+                    val saveResult = SaveHelper.saveToUri(this, file, uri)
+                    if (saveResult.success) {
+                        Toast.makeText(this, "PDF saved successfully", Toast.LENGTH_LONG).show()
+                    } else {
+                        Toast.makeText(this, "Save failed: ${saveResult.error}", Toast.LENGTH_LONG).show()
+                    }
+                } else {
+                    Toast.makeText(this, "PDF file not found", Toast.LENGTH_LONG).show()
+                }
+            } else if (resultCode == RESULT_CANCELED) {
+                Toast.makeText(this, "Save cancelled", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "Save failed", Toast.LENGTH_SHORT).show()
+            }
+            pendingSaveFile = null
         }
     }
 
