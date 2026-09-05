@@ -320,7 +320,7 @@ class PdfArtifactManagerTest {
 
     @Test
     fun filenamePreventsDangerousCharsInDraftId() {
-        val draft = makeDraft(id = "draft\x00id")
+        val draft = makeDraft(id = "draft\u0000id")
         val filename = PdfArtifactManager.buildArtifactFilename(draft, PaperSize.A4)
         assertFalse("Must not contain null byte in draft ID", filename.contains("\u0000"))
     }
