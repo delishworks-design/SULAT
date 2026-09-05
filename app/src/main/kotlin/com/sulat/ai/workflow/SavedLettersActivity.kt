@@ -49,7 +49,7 @@ class SavedLettersActivity : Activity() {
         if (drafts.isEmpty()) {
             val emptyView = TextView(this).apply {
                 text = "No saved letters yet."
-                textSize = 16sp
+                textSize = 16f
                 setTextColor(resources.getColor(R.color.muted_text))
                 setPadding(32, 64, 32, 32)
                 textAlignment = View.TEXT_ALIGNMENT_CENTER

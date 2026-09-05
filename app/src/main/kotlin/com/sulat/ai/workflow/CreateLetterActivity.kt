@@ -22,7 +22,7 @@ class CreateLetterActivity : Activity() {
     }
 
     private var draftId: String = ""
-    private val recipientViews = mutableListOf<LinearLayout>()
+    private val recipientViews = mutableListOf<View>()
     private val recipientIds = mutableListOf<String>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
