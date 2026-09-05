@@ -5,11 +5,11 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import com.sulat.ai.data.model.LetterDraft
-import com.sulat.ai.data.model.SenderProfile
 import com.sulat.ai.document.PaperSize
 import com.sulat.ai.document.layout.DocumentLayout
 import java.io.File
 import java.io.FileOutputStream
+import kotlin.math.round
 
 data class PdfRenderResult(
     val success: Boolean,
@@ -20,33 +20,63 @@ data class PdfRenderResult(
 
 class PdfRenderer {
 
+    /**
+     * Render a [DocumentLayout] to a real PDF file.
+     * Page geometry is derived exclusively from [layout.page] (Issue 1).
+     * Integer PDF dimensions are produced by rounding, not truncating (Issue 2).
+     * The [paperSize] parameter is accepted only for validation; it must not override layout geometry.
+     * If [paperSize] is null, no validation occurs (layout geometry is trusted unconditionally).
+     */
     fun renderPdf(
         layout: DocumentLayout,
-        paperSize: PaperSize,
-        outputFile: File
+        outputFile: File,
+        paperSize: PaperSize? = null
     ): PdfRenderResult {
-        val calculator = PdfContentCalculator(layout)
+        if (paperSize != null) {
+            val widthMatch = kotlin.math.abs(paperSize.widthPt - layout.page.widthPt) < 0.01
+            val heightMatch = kotlin.math.abs(paperSize.heightPt - layout.page.heightPt) < 0.01
+            if (!widthMatch || !heightMatch) {
+                return PdfRenderResult(
+                    success = false,
+                    error = "PaperSize ${paperSize.name} (${paperSize.widthPt}x${paperSize.heightPt}pt) " +
+                        "does not match layout geometry (${layout.page.widthPt}x${layout.page.heightPt}pt). " +
+                        "DocumentLayout is the page geometry source of truth."
+                )
+            }
+        }
+
+        val measurer = AndroidPdfTextMeasurer()
+        val calculator = PdfContentCalculator(layout, measurer)
         val plan = calculator.plan()
+
+        val pdfWidth = round(layout.page.widthPt).toInt()
+        val pdfHeight = round(layout.page.heightPt).toInt()
 
         val pdfDocument = PdfDocument()
         try {
             for (renderPage in plan.pages) {
                 val pageInfo = PdfDocument.PageInfo.Builder(
-                    paperSize.widthPt.toInt(),
-                    paperSize.heightPt.toInt(),
+                    pdfWidth,
+                    pdfHeight,
                     renderPage.pageNumber
                 ).create()
 
                 val page = pdfDocument.startPage(pageInfo)
-                val canvas = page.canvas
-
-                renderPageContent(canvas, renderPage, layout)
-
+                renderPageContent(page.canvas, renderPage, layout)
                 pdfDocument.finishPage(page)
             }
 
+            outputFile.parentFile?.mkdirs()
+
             FileOutputStream(outputFile).use { out ->
                 pdfDocument.writeTo(out)
+            }
+
+            if (!outputFile.exists() || outputFile.length() == 0L) {
+                return PdfRenderResult(
+                    success = false,
+                    error = "PDF file was not written or is empty"
+                )
             }
 
             return PdfRenderResult(
@@ -55,13 +85,27 @@ class PdfRenderer {
                 pageCount = plan.totalPages
             )
         } catch (e: Exception) {
+            if (outputFile.exists()) {
+                outputFile.delete()
+            }
             return PdfRenderResult(
                 success = false,
-                error = e.message ?: "Unknown error"
+                error = "PDF rendering failed: ${e.message}"
             )
         } finally {
             pdfDocument.close()
         }
+    }
+
+    /**
+     * Backward-compatible overload: accepts PaperSize as positional parameter.
+     */
+    fun renderPdf(
+        layout: DocumentLayout,
+        paperSize: PaperSize,
+        outputFile: File
+    ): PdfRenderResult {
+        return renderPdf(layout, outputFile, paperSize)
     }
 
     private fun renderPageContent(canvas: Canvas, renderPage: RenderPage, layout: DocumentLayout) {
@@ -75,12 +119,11 @@ class PdfRenderer {
             paint.textSize = style.fontSizePt.toFloat()
             paint.isFakeBoldText = style.isBold
 
-            if (style.isItalic) {
-                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
-            } else if (style.isBold) {
-                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-            } else {
-                paint.typeface = Typeface.DEFAULT
+            paint.typeface = when {
+                style.isItalic && style.isBold -> Typeface.create(Typeface.DEFAULT, Typeface.BOLD_ITALIC)
+                style.isItalic -> Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
+                style.isBold -> Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+                else -> Typeface.DEFAULT
             }
 
             canvas.drawText(
@@ -94,12 +137,12 @@ class PdfRenderer {
 
     fun renderLetterToPdf(
         draft: LetterDraft,
-        paperSize: PaperSize,
-        outputFile: File
+        outputFile: File,
+        paperSize: PaperSize = PaperSize.A4
     ): PdfRenderResult {
         val engine = LetterTemplateEngine()
         val layout = engine.buildLayout(draft, paperSize)
-        return renderPdf(layout, paperSize, outputFile)
+        return renderPdf(layout, outputFile, paperSize)
     }
 
     companion object {
@@ -109,5 +152,11 @@ class PdfRenderer {
             file.inputStream().use { it.read(header) }
             return String(header) == "%PDF-"
         }
+
+        /**
+         * Deterministic conversion from layout point dimensions to integer PDF dimensions.
+         * Uses rounding rather than truncation to preserve print accuracy.
+         */
+        fun roundPdfDimension(ptValue: Double): Int = round(ptValue).toInt()
     }
 }

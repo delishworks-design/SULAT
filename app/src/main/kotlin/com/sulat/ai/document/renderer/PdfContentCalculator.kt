@@ -4,7 +4,7 @@ import com.sulat.ai.document.layout.DocumentLayout
 import com.sulat.ai.document.layout.LayoutSection
 import com.sulat.ai.document.layout.Paragraph
 import com.sulat.ai.document.layout.RecipientEntry
-import kotlin.math.ceil
+import kotlin.math.round
 
 data class RenderLine(
     val text: String,
@@ -23,7 +23,8 @@ data class RenderPlan(
 )
 
 class PdfContentCalculator(
-    private val layout: DocumentLayout
+    private val layout: DocumentLayout,
+    private val textMeasurer: TextMeasurer = DeterministicTextMeasurer()
 ) {
     private val page get() = layout.page
 
@@ -62,8 +63,7 @@ class PdfContentCalculator(
         fun addWrappedLines(text: String, role: PdfTextRole, maxWidthPt: Double) {
             val style = role.style
             val lineHeight = style.fontSizePt * style.lineSpacingMultiplier
-            val charsPerLine = estimateCharsPerLine(maxWidthPt, style.fontSizePt)
-            val wrapped = wrapText(text, charsPerLine)
+            val wrapped = wrapTextWidthAware(text, role, maxWidthPt)
             for (line in wrapped) {
                 if (!checkSpace(lineHeight)) newPage()
                 currentPageLines.add(RenderLine(line, role, cursorY))
@@ -183,29 +183,86 @@ class PdfContentCalculator(
         }
     }
 
-    private fun estimateCharsPerLine(availableWidthPt: Double, fontSizePt: Double): Int {
-        val avgCharWidth = fontSizePt * 0.55
-        return (availableWidthPt / avgCharWidth).toInt().coerceAtLeast(20)
-    }
+    private fun wrapTextWidthAware(text: String, role: PdfTextRole, maxWidthPt: Double): List<String> {
+        if (text.isEmpty()) return listOf(text)
 
-    private fun wrapText(text: String, maxCharsPerLine: Int): List<String> {
-        if (text.length <= maxCharsPerLine) return listOf(text)
+        val style = role.style
+        val totalWidth = textMeasurer.measureTextWidth(text, style.fontSizePt, style.isBold)
+        if (totalWidth <= maxWidthPt) return listOf(text)
+
         val words = text.split(" ")
         val lines = mutableListOf<String>()
         var currentLine = StringBuilder()
+
         for (word in words) {
             if (currentLine.isEmpty()) {
-                currentLine.append(word)
-            } else if (currentLine.length + 1 + word.length <= maxCharsPerLine) {
-                currentLine.append(" ").append(word)
+                if (word.isEmpty()) {
+                    continue
+                }
+                val wordWidth = textMeasurer.measureTextWidth(word, style.fontSizePt, style.isBold)
+                if (wordWidth > maxWidthPt) {
+                    if (currentLine.isNotEmpty()) {
+                        lines.add(currentLine.toString())
+                        currentLine = StringBuilder()
+                    }
+                    val splitTokens = splitLongToken(word, role, maxWidthPt)
+                    for (token in splitTokens) {
+                        if (token.isNotEmpty()) {
+                            lines.add(token)
+                        }
+                    }
+                } else {
+                    currentLine.append(word)
+                }
             } else {
-                lines.add(currentLine.toString())
-                currentLine = StringBuilder(word)
+                val candidate = currentLine.toString() + " " + word
+                val candidateWidth = textMeasurer.measureTextWidth(candidate, style.fontSizePt, style.isBold)
+                if (candidateWidth <= maxWidthPt) {
+                    currentLine.append(" ").append(word)
+                } else {
+                    lines.add(currentLine.toString())
+                    val wordWidth = textMeasurer.measureTextWidth(word, style.fontSizePt, style.isBold)
+                    if (wordWidth > maxWidthPt) {
+                        val splitTokens = splitLongToken(word, role, maxWidthPt)
+                        for (token in splitTokens) {
+                            if (token.isNotEmpty()) {
+                                lines.add(token)
+                            }
+                        }
+                        currentLine = StringBuilder()
+                    } else {
+                        currentLine = StringBuilder(word)
+                    }
+                }
             }
         }
         if (currentLine.isNotEmpty()) {
             lines.add(currentLine.toString())
         }
         return lines.ifEmpty { listOf(text) }
+    }
+
+    private fun splitLongToken(token: String, role: PdfTextRole, maxWidthPt: Double): List<String> {
+        if (token.isEmpty()) return emptyList()
+        val style = role.style
+        val maxChars = textMeasurer.estimateMaxCharsForWidth(token, role, maxWidthPt)
+        if (maxChars >= token.length) return listOf(token)
+
+        val result = mutableListOf<String>()
+        var start = 0
+        while (start < token.length) {
+            var end = (start + maxChars).coerceAtMost(token.length)
+            while (end > start + 1) {
+                val chunk = token.substring(start, end)
+                val chunkWidth = textMeasurer.measureTextWidth(chunk, style.fontSizePt, style.isBold)
+                if (chunkWidth <= maxWidthPt) break
+                end--
+            }
+            if (start < token.length) {
+                result.add(token.substring(start, end))
+                start = end
+            }
+        }
+        return result
     }
 }
