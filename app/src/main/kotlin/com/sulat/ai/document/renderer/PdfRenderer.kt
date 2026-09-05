@@ -29,7 +29,7 @@ class PdfRenderer {
             sb.append("Recipient: ${recipient.name}\n")
             sb.append("Position: ${recipient.position}\n")
             sb.append("Organization: ${recipient.organization}\n\n")
-            sb.append("Date: ${dateFormat.format(dates[0].date)}\n\n")
+            sb.append("Date: ${if (dates.isNotEmpty()) dateFormat.format(dates[0].date) else "(no date)"}\n\n")
             sb.append("Sender: ${draft.sender.name}\n")
             sb.append("Address: ${draft.sender.address}\n\n")
             sb.append("Letter Body:\n${draft.body}\n\n")
@@ -73,7 +73,7 @@ class PdfRenderer {
             sb.append("Bro. ${recipient.name}\n")
             sb.append("${recipient.position}\n")
             sb.append("${recipient.organization}\n")
-            sb.append("Date: ${dateFormat.format(dates[0].date)}\n")
+            sb.append("Date: ${if (dates.isNotEmpty()) dateFormat.format(dates[0].date) else "(no date)"}\n")
 
             outputFile.writeText(sb.toString())
             return true
@@ -88,7 +88,7 @@ class PdfRenderer {
         sb.append("SULAT - Combined Letters\n")
         sb.append("========================\n\n")
         drafts.forEachIndexed { index, draft ->
-            sb.append("Letter ${index + 1}: ${draft.recipient.name} - ${draft.dates[0].label}\n")
+            sb.append("Letter ${index + 1}: ${draft.recipients.firstOrNull()?.name ?: "(no recipient)"} - ${draft.dates.firstOrNull()?.label ?: "(no date)"}\n")
             sb.append("${draft.body.substring(0, minOf(50, draft.body.length))}...\n\n")
         }
         return sb.toString()

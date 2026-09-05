@@ -1,13 +1,19 @@
 package com.sulat.ai.data.model
 
+import java.util.Date
+import java.util.UUID
+
 data class Recipient(
-    val name: String,
-    val position: String,
-    val organization: String
+    val id: String = UUID.randomUUID().toString(),
+    val name: String = "",
+    val position: String = "",
+    val organization: String = "",
+    val address: String = "",
+    val optionalInfo: String = ""
 )
 
 data class LetterDate(
-    val date: java.util.Date,
+    val date: Date,
     val label: String
 )
 
@@ -31,12 +37,14 @@ data class PersonalExperience(
 )
 
 data class LetterDraft(
-    val id: String,
-    val recipient: Recipient,
-    val dates: List<LetterDate>,
-    val sender: SenderProfile,
-    val body: String,
-    val createdTime: Long,
-    val modifiedTime: Long,
-    var isGenerated: Boolean = false
+    val id: String = UUID.randomUUID().toString(),
+    val recipients: List<Recipient> = emptyList(),
+    val dates: List<LetterDate> = emptyList(),
+    val sender: SenderProfile = SenderProfile(),
+    val body: String = "",
+    val subject: String = "",
+    val greeting: String = "",
+    val createdTime: Long = System.currentTimeMillis(),
+    val modifiedTime: Long = System.currentTimeMillis(),
+    val isGenerated: Boolean = false
 )
