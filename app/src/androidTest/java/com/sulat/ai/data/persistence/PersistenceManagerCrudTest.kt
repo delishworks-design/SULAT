@@ -192,4 +192,87 @@ class PersistenceManagerCrudTest {
         assertEquals("January 2, 2026", loaded.dates[1].label)
         assertEquals("January 3, 2026", loaded.dates[2].label)
     }
+
+    // ══════════════════════════════════════════════════════════════════════
+    // FIX11A REGRESSION: createDraft crash path
+    // ══════════════════════════════════════════════════════════════════════
+
+    @Test
+    fun testCreateDraftDoesNotCrash() {
+        val draft = PersistenceManager.createDraft(context)
+        assertNotNull("Draft must not be null", draft)
+        assertTrue("Draft ID must not be blank", draft.id.isNotBlank())
+    }
+
+    @Test
+    fun testCreateDraftPersistsToFile() {
+        val draft = PersistenceManager.createDraft(context)
+
+        val dataFile = java.io.File(context.filesDir, "sulat_data.json")
+        assertTrue("Data file must exist after createDraft", dataFile.exists())
+        assertTrue("Data file must be non-empty after createDraft", dataFile.length() > 0)
+
+        val json = dataFile.readText(Charsets.UTF_8)
+        assertTrue("File must contain valid JSON", json.contains("\"drafts\""))
+        assertTrue("File must contain the draft ID", json.contains(draft.id))
+    }
+
+    @Test
+    fun testCreateDraftRetrievableByGetDraft() {
+        val draft = PersistenceManager.createDraft(context)
+
+        val found = PersistenceManager.getDraft(context, draft.id)
+        assertNotNull("getDraft must find the created draft", found)
+        assertEquals("Draft ID must match", draft.id, found!!.id)
+        assertEquals("Draft createdTime must match", draft.createdTime, found.createdTime)
+    }
+
+    @Test
+    fun testCreateDraftRetrievableByLoadDrafts() {
+        val draft = PersistenceManager.createDraft(context)
+
+        val all = PersistenceManager.loadDrafts(context)
+        assertTrue("loadDrafts must contain the created draft", all.any { it.id == draft.id })
+    }
+
+    @Test
+    fun testCreateDraftThreeTimesAllPersist() {
+        val d1 = PersistenceManager.createDraft(context)
+        val d2 = PersistenceManager.createDraft(context)
+        val d3 = PersistenceManager.createDraft(context)
+
+        assertNotEquals("d1 and d2 must have different IDs", d1.id, d2.id)
+        assertNotEquals("d2 and d3 must have different IDs", d2.id, d3.id)
+        assertNotEquals("d1 and d3 must have different IDs", d1.id, d3.id)
+
+        val all = PersistenceManager.loadDrafts(context)
+        assertEquals("All 3 drafts must persist", 3, all.size)
+        assertTrue("d1 must be present", all.any { it.id == d1.id })
+        assertTrue("d2 must be present", all.any { it.id == d2.id })
+        assertTrue("d3 must be present", all.any { it.id == d3.id })
+
+        val f1 = PersistenceManager.getDraft(context, d1.id)
+        val f2 = PersistenceManager.getDraft(context, d2.id)
+        val f3 = PersistenceManager.getDraft(context, d3.id)
+        assertNotNull("d1 retrievable", f1)
+        assertNotNull("d2 retrievable", f2)
+        assertNotNull("d3 retrievable", f3)
+    }
+
+    @Test
+    fun testCreateDraftAfterClearDrafts() {
+        PersistenceManager.createDraft(context)
+        PersistenceManager.createDraft(context)
+        PersistenceManager.clearDrafts(context)
+
+        val afterClear = PersistenceManager.loadDrafts(context)
+        assertTrue("Store must be empty after clear", afterClear.isEmpty())
+
+        val draft = PersistenceManager.createDraft(context)
+        assertNotNull("createDraft after clear must succeed", draft)
+        assertTrue("New draft ID must not be blank", draft.id.isNotBlank())
+
+        val found = PersistenceManager.getDraft(context, draft.id)
+        assertNotNull("New draft must be retrievable", found)
+    }
 }

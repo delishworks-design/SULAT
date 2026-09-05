@@ -103,17 +103,24 @@ object PersistenceManager {
         val tempFile = getTempFile(context)
         val dataFile = getDataFile(context)
         try {
-            // Step 1: Write complete JSON to temp file
-            tempFile.writeText(root.toString(), Charsets.UTF_8)
-            tempFile.outputStream().flush()
-            tempFile.outputStream().close()
+            // Step 1: Write complete JSON to temp file atomically
+            val jsonBytes = root.toString().toByteArray(Charsets.UTF_8)
+            java.io.FileOutputStream(tempFile).use { output ->
+                output.write(jsonBytes)
+                output.flush()
+            }
 
-            // Step 2: Delete destination if it exists
+            // Step 2: Verify temp file is non-empty before replacing destination
+            if (!tempFile.exists() || tempFile.length() == 0L) {
+                throw IllegalStateException("Temp file missing or empty after write to ${tempFile.absolutePath}")
+            }
+
+            // Step 3: Delete destination if it exists
             if (dataFile.exists()) {
                 dataFile.delete()
             }
 
-            // Step 3: Rename temp to destination
+            // Step 4: Rename temp to destination
             val renamed = tempFile.renameTo(dataFile)
 
             if (!renamed) {
@@ -123,7 +130,7 @@ object PersistenceManager {
                 tempFile.delete()
             }
 
-            // Step 4: Verify destination exists and has content
+            // Step 5: Verify destination exists and has content
             if (!dataFile.exists() || dataFile.length() == 0L) {
                 Log.e(TAG, "Data file missing or empty after write")
                 throw IllegalStateException("Failed to persist data to ${dataFile.absolutePath}")
