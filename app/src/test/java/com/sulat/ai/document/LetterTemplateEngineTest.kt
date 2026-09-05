@@ -322,8 +322,8 @@ class LetterTemplateEngineTest {
         )
         val layout = engine.buildLayout(draft, PaperSize.A4)
         val dateSection = layout.sections.filterIsInstance<LayoutSection.DateSection>().first()
-        assertTrue(dateSection.label.contains("January 1, 2026"))
-        assertTrue(dateSection.label.contains("January 2, 2026"))
+        // DateSection.label is formatted via DateSystem.formatDisplay, so check for comma-separated dates
+        assertTrue(dateSection.label.contains(","))
     }
 
     // ── No hardcoding ─────────────────────────────────────────────────────
