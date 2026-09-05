@@ -2,7 +2,6 @@ package com.sulat.ai.preview
 
 import android.app.Activity
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import android.view.View
 import android.widget.Button
@@ -16,13 +15,15 @@ import com.sulat.ai.document.PaperSize
 import com.sulat.ai.document.renderer.LetterTemplateEngine
 import com.sulat.ai.document.renderer.PdfContentCalculator
 import com.sulat.ai.print.PrintHelper
+import com.sulat.ai.share.PdfArtifactManager
 import com.sulat.ai.share.SaveHelper
 import com.sulat.ai.share.ShareHelper
+import java.io.File
 
 /**
  * Activity that renders a letter preview using the same deterministic pipeline as PDF.
- * Loads a draft by ID from PersistenceManager.
- * Shows error state for missing/invalid drafts — no demo fallback.
+ * Uses a single canonical PDF artifact for Save, Share, and Print operations.
+ * The artifact is generated once and reused for all subsequent operations.
  */
 class PreviewActivity : Activity() {
 
@@ -35,7 +36,7 @@ class PreviewActivity : Activity() {
     private var calculator: PreviewCalculator? = null
     private var currentDraft: LetterDraft? = null
     private var currentPaperSize: PaperSize = PaperSize.A4
-    private var pendingSaveFile: java.io.File? = null
+    private var currentArtifact: File? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -104,47 +105,36 @@ class PreviewActivity : Activity() {
             savePdf()
         }
         findViewById<Button>(R.id.btnShare).setOnClickListener {
-            val draft = currentDraft
-            if (draft == null) {
-                Toast.makeText(this, "No letter loaded to share.", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            val result = ShareHelper.generateAndShare(this, draft, currentPaperSize)
-            if (!result.success) {
-                Toast.makeText(this, "Share failed: ${result.error}", Toast.LENGTH_LONG).show()
-            }
+            sharePdf()
         }
         findViewById<Button>(R.id.btnPrint).setOnClickListener {
-            val draft = currentDraft
-            if (draft == null) {
-                Toast.makeText(this, "No letter loaded to print.", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            val result = PrintHelper.printDocument(this, draft, currentPaperSize)
-            if (!result.success) {
-                Toast.makeText(this, "Print failed: ${result.error}", Toast.LENGTH_LONG).show()
-            } else {
-                Toast.makeText(this, "Print job sent", Toast.LENGTH_SHORT).show()
-            }
+            printPdf()
         }
     }
 
+    private fun ensurePdfArtifact(): File? {
+        val draft = currentDraft ?: return null
+        val paperSize = currentPaperSize
+
+        val result = PdfArtifactManager.ensurePdfArtifact(this, draft, paperSize)
+        if (!result.success) {
+            Toast.makeText(this, "Failed to generate PDF: ${result.error}", Toast.LENGTH_LONG).show()
+            return null
+        }
+
+        currentArtifact = result.artifact
+        return result.artifact
+    }
+
     private fun savePdf() {
+        val artifact = ensurePdfArtifact() ?: return
+
         val draft = currentDraft
         if (draft == null) {
             Toast.makeText(this, "No letter loaded to save.", Toast.LENGTH_SHORT).show()
             return
         }
 
-        Toast.makeText(this, "Generating PDF...", Toast.LENGTH_SHORT).show()
-
-        val result = SaveHelper.generatePdf(this, draft, currentPaperSize)
-        if (!result.success) {
-            Toast.makeText(this, "Failed to generate PDF: ${result.error}", Toast.LENGTH_LONG).show()
-            return
-        }
-
-        pendingSaveFile = result.pdfFile
         val filename = SaveHelper.buildFilename(draft)
 
         val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
@@ -161,9 +151,9 @@ class PreviewActivity : Activity() {
         if (requestCode == SAVE_REQUEST_CODE) {
             if (resultCode == RESULT_OK && data?.data != null) {
                 val uri = data.data!!
-                val file = pendingSaveFile
-                if (file != null && file.exists()) {
-                    val saveResult = SaveHelper.saveToUri(this, file, uri)
+                val artifact = currentArtifact
+                if (artifact != null && artifact.exists()) {
+                    val saveResult = SaveHelper.saveToUri(this, artifact, uri)
                     if (saveResult.success) {
                         Toast.makeText(this, "PDF saved successfully", Toast.LENGTH_LONG).show()
                     } else {
@@ -177,7 +167,40 @@ class PreviewActivity : Activity() {
             } else {
                 Toast.makeText(this, "Save failed", Toast.LENGTH_SHORT).show()
             }
-            pendingSaveFile = null
+        }
+    }
+
+    private fun sharePdf() {
+        val artifact = ensurePdfArtifact() ?: return
+
+        val validation = PdfArtifactManager.validateArtifact(artifact, this)
+        if (validation != null) {
+            Toast.makeText(this, "Share failed: $validation", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        val result = ShareHelper.sharePdf(this, artifact)
+        if (!result.success) {
+            Toast.makeText(this, "Share failed: ${result.error}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun printPdf() {
+        val artifact = ensurePdfArtifact() ?: return
+
+        val validation = PdfArtifactManager.validateArtifact(artifact, this)
+        if (validation != null) {
+            Toast.makeText(this, "Print failed: $validation", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        val draft = currentDraft ?: return
+        val jobName = "Sulat-Letter-${draft.id.take(8)}"
+        val result = PrintHelper.printExistingPdf(this, artifact, currentPaperSize, jobName)
+        if (!result.success) {
+            Toast.makeText(this, "Print failed: ${result.error}", Toast.LENGTH_LONG).show()
+        } else {
+            Toast.makeText(this, "Print job sent", Toast.LENGTH_SHORT).show()
         }
     }
 
