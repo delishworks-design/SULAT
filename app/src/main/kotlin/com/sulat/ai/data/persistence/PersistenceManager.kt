@@ -5,6 +5,8 @@ import android.util.Log
 import com.sulat.ai.data.model.LetterDate
 import com.sulat.ai.data.model.LetterDraft
 import com.sulat.ai.data.model.SenderProfile
+import com.sulat.ai.document.PaperSize
+import com.sulat.ai.share.PdfArtifactManager
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -47,6 +49,7 @@ object PersistenceManager {
             drafts.add(draft)
         }
         writeDrafts(context, drafts)
+        invalidateCachedArtifacts(context, draft)
     }
 
     // ── Load all ──────────────────────────────────────────────────────────
@@ -80,14 +83,41 @@ object PersistenceManager {
     // ── Delete ────────────────────────────────────────────────────────────
 
     fun deleteDraft(context: Context, id: String) {
+        // Locate the draft before removing it so we can invalidate its cached
+        // artifacts (PDF + fingerprint sidecar) for every paper size. This
+        // prevents sensitive content from persisting in cacheDir/shared/ after
+        // a user-initiated delete.
+        val target = loadDrafts(context).firstOrNull { it.id == id }
         val drafts = loadDrafts(context).filter { it.id != id }
         writeDrafts(context, drafts)
+        if (target != null) {
+            invalidateCachedArtifacts(context, target)
+        }
     }
 
     // ── Clear all ─────────────────────────────────────────────────────────
 
     fun clearDrafts(context: Context) {
         writeDrafts(context, emptyList())
+    }
+
+    // ── Cached artifact invalidation ──────────────────────────────────────
+
+    /**
+     * Invalidate cached PDF artifacts (and their fingerprint sidecars) for the
+     * supplied draft across all paper sizes. Called from [saveDraft] and
+     * [deleteDraft] so that any subsequent [PdfArtifactManager.ensurePdfArtifact]
+     * is forced to regenerate. PersistenceManager does NOT generate PDFs — that
+     * remains the responsibility of [PdfArtifactManager].
+     */
+    private fun invalidateCachedArtifacts(context: Context, draft: LetterDraft) {
+        for (paperSize in PaperSize.entries) {
+            try {
+                PdfArtifactManager.deleteArtifact(context, draft, paperSize)
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to invalidate cached artifact for draft=${draft.id} size=${paperSize.name}: ${e.message}")
+            }
+        }
     }
 
     // ── JSON write (safe replacement) ─────────────────────────────────────
