@@ -361,3 +361,244 @@ ready for a separate FIX14-B implementation commit.** Production code intentiona
 unchanged in this investigation commit.
 
 ---
+
+## FIX14-B — Stale PDF artifact implementation
+
+### Status
+
+**Implemented, tested, CI GREEN.** Commit `3793b78` on `main`.
+
+### Implementation summary
+
+The fix combines two layers of defense:
+
+1. **Central persistence invalidation** — `PersistenceManager.saveDraft` and
+   `PersistenceManager.deleteDraft` now call `PdfArtifactManager.deleteArtifact`
+   for every `PaperSize` after the JSON write succeeds. This puts invalidation
+   at the single chokepoint where all edits and deletes flow through. Any
+   future editor activity that calls `PersistenceManager.saveDraft`
+   automatically gets invalidation.
+
+2. **Content-fingerprint sidecar verification** — `PdfArtifactManager` now
+   writes a sidecar file (`<artifact>.pdf.fp`) next to every successfully
+   generated PDF containing a SHA-256 fingerprint of the exact render-driving
+   fields. `isValidArtifact` consults the sidecar and treats the artifact as
+   INVALID if the sidecar is missing, unreadable, or does not match the
+   recomputed fingerprint. This is defense-in-depth: even if invalidation at
+   the persistence layer is bypassed by a future caller, the sidecar check
+   detects staleness.
+
+`PdfArtifactManager.computeContentFingerprint(draft, paperSize)` is a public
+function. `PdfArtifactManager.sidecarFor(artifact)` is a public function.
+Both are exercised by the regression tests.
+
+### Exact fingerprint inputs
+
+The fingerprint is a SHA-256 over a stable, ordered concatenation. The exact
+fields, verified against `LetterTemplateEngine.buildLayout` and
+`PdfContentCalculator` (NOT taken from the FIX14 report's field list — verified
+from the actual rendering code):
+
+| Field | Source | Verified against |
+|---|---|---|
+| `paperSize.widthPt` | `PaperSize` enum | `LetterTemplateEngine.kt:24-25` |
+| `paperSize.heightPt` | `PaperSize` enum | `LetterTemplateEngine.kt:24-25` |
+| `draft.dates[*].date.time` (iteration order) | `LetterDraft.dates` → `DateSystem.dateToLocalDate` → `formatDisplay` | `LetterTemplateEngine.kt:36-41`, `DateSystem.kt:161` |
+| `draft.recipients[*].name` | `LetterDraft.recipients` (rendered via `parseRecipientName`) | `LetterTemplateEngine.kt:44-50` |
+| `draft.recipients[*].position` | `LetterDraft.recipients` | `PdfContentCalculator.kt:142-144` |
+| `draft.recipients[*].organization` | `LetterDraft.recipients` | `PdfContentCalculator.kt:146-148` |
+| `draft.recipients[*].address` | `LetterDraft.recipients` | `PdfContentCalculator.kt:149-151` |
+| `draft.recipients[*].optionalInfo` | `LetterDraft.recipients` | `PdfContentCalculator.kt:152-154` |
+| `draft.subject` | `LetterDraft` | `LetterTemplateEngine.kt:53-55`, rendered as `"Re: ${section.text}"` |
+| `draft.greeting` | `LetterDraft` | `LetterTemplateEngine.kt:58-60` |
+| `draft.body` | `LetterDraft` (parsed via `parseBodyParagraphs`) | `LetterTemplateEngine.kt:62-64`, `PdfContentCalculator.kt:98-107` |
+| `draft.sender.signature` | `LetterDraft.sender` | `PdfContentCalculator.kt:163-166` |
+| `draft.sender.name` | `LetterDraft.sender` | `PdfContentCalculator.kt:168-170` |
+| `draft.sender.address` | `LetterDraft.sender` | `PdfContentCalculator.kt:171-173` |
+| `draft.sender.lokal` | `LetterDraft.sender` | `PdfContentCalculator.kt:174-176` |
+| `draft.sender.distrito` | `LetterDraft.sender` | `PdfContentCalculator.kt:177-179` |
+| `draft.sender.contactNumber` | `LetterDraft.sender` | `PdfContentCalculator.kt:180-182` |
+
+Explicitly EXCLUDED (verified non-render inputs):
+
+| Field | Reason |
+|---|---|
+| `draft.id` | Used only by canonical filename, not by buildLayout. |
+| `draft.createdTime` | Not read by buildLayout. |
+| `draft.modifiedTime` | Not read by buildLayout. |
+| `draft.isGenerated` | Not read by buildLayout. |
+| `recipient.id` | Not read by `renderRecipient`. |
+| `date.label` | Not read by buildLayout — only `date.time` is consumed. |
+
+### Invalidation behavior
+
+`PdfArtifactManager.isValidArtifact` returns `true` only if ALL of the
+following hold:
+
+1. The artifact file exists, is a regular file, and has non-zero length.
+2. The artifact begins with the `%PDF-` magic.
+3. The artifact's canonical path equals the canonical path computed for the
+   supplied draft + paper size.
+4. The artifact's sidecar file (`<artifact>.pdf.fp`) exists and is readable.
+5. The sidecar content (trimmed) equals `computeContentFingerprint(draft, paperSize)`.
+
+If any of these checks fail, the artifact is treated as INVALID and the next
+call to `ensurePdfArtifact` regenerates it.
+
+### Sidecar behavior
+
+- Path: `<artifact>.pdf.fp` (same directory as the PDF, `.fp` suffix).
+- Content: a single line containing the lowercase hex SHA-256 (64 chars).
+- Written by `ensurePdfArtifact` immediately after the PDF write succeeds and
+  has been structurally validated.
+- If the sidecar write fails, the PDF is deleted and `ensurePdfArtifact`
+  returns an error. The system never leaves an artifact without a sidecar.
+- `deleteArtifact` deletes both the PDF and any existing sidecar.
+
+### Backward compatibility
+
+Existing PDFs from before the fingerprint system have no `.fp` sidecar. These
+are treated as INVALID by `isValidArtifact` and regenerated on the next
+`ensurePdfArtifact` call. This is intentional and required — the system must
+NOT trust legacy cached PDFs.
+
+The canonical filename contract is unchanged. Existing tests
+(`PdfArtifactManagerTest`, `SaveHelperTest`, `ShareHelperTest`, `PrintHelperTest`)
+all use `buildArtifactFilename` directly, which is unchanged. The only
+additions to the public surface are:
+
+- `PdfArtifactManager.computeContentFingerprint` (new)
+- `PdfArtifactManager.sidecarFor` (new)
+
+### Regression tests
+
+Two new permanent test files:
+
+- `app/src/test/java/com/sulat/ai/share/PdfArtifactFingerprintTest.kt` —
+  19 tests covering the fingerprint contract:
+  same-content-same-fingerprint; body/subject/recipient/recipient-field/recipient-order/
+  sender/sender-field/date-time/date-order/greeting changes produce different
+  fingerprints; date label change alone does NOT change fingerprint (label is
+  not a render input); isGenerated / createdTime / modifiedTime do NOT change
+  fingerprint; draft.id alone does NOT change fingerprint; recipient.id alone
+  does NOT change fingerprint; same-content-same-paper-size-same-canonical-path;
+  different-draft-different-canonical-path; different-paper-size-different-canonical-path;
+  all four paper sizes produce distinct fingerprints; fingerprint is a 64-char
+  lowercase hex SHA-256.
+
+- `app/src/test/java/com/sulat/ai/share/PdfArtifactStalenessTest.kt` —
+  13 tests covering artifact validity and the central staleness regression:
+  same-draft-id-edited-invalidates-artifact (the most important regression);
+  subject-change-invalidates-artifact; recipient-change-invalidates-artifact;
+  missing-sidecar-invalidates-artifact; mismatched-sidecar-invalidates-artifact;
+  matching-sidecar-validates-artifact; empty-pdf-invalidates-artifact;
+  non-pdf-content-invalidates-artifact; same-draft-same-content-same-canonical-path;
+  different-draft-different-canonical-path; different-paper-size-different-canonical-path;
+  sidecar-path-is-artifact-path-plus-fp-extension; sidecar-lives-in-same-directory;
+  full-staleness-regression-old-sidecar-does-not-match-edited-draft.
+
+The temporary `Fix14StalenessReproductionTest.kt` was deleted; its structural
+preconditions are now covered by the permanent tests above.
+
+### Save / Share / Print verification
+
+The PDF funnel remains:
+
+```
+LetterData → DocumentLayout → PDF Renderer → PdfArtifactManager → canonical artifact
+                                                                          ↓
+                                                          Save / Share / Print
+```
+
+Verified by code inspection:
+
+- `PreviewActivity.savePdf` (line 129-146) → `ensurePdfArtifact` → `currentArtifact` → `SaveHelper.saveToUri`.
+- `PreviewActivity.sharePdf` (line 173-186) → `ensurePdfArtifact` → `ShareHelper.sharePdf`.
+- `PreviewActivity.printPdf` (line 188-205) → `ensurePdfArtifact` → `PrintHelper.printExistingPdf`.
+
+No new PDF generation call sites were introduced. `PersistenceManager` does NOT
+generate PDFs — it only invalidates cached artifacts via
+`PdfArtifactManager.deleteArtifact`. The single canonical funnel is preserved.
+
+### Security verification
+
+- `sanitizeForFilename` is unchanged. All existing path-traversal protections
+  remain active. The new fingerprint code never touches filenames; it only
+  reads/writes `<artifact>.pdf.fp` next to the artifact, and the artifact path
+  has already been sanitized.
+- `validateArtifact` is unchanged (still enforces `cacheDir/shared/`
+  containment via `ShareHelper.validateShareDirectory`).
+- `file_paths.xml` FileProvider configuration is unchanged.
+- Existing security tests in `PdfArtifactManagerTest`
+  (`buildArtifactFilenameSanitizesDangerousChars`,
+  `filenamePreventsPathTraversalSubject`,
+  `filenamePreventsPathTraversalInDraftId`,
+  `buildArtifactFilenameSanitizesDangerousDraftId`,
+  `filenamePreventsDangerousCharsInDraftId`,
+  `filenamePreventsNullByte`, `filenamePreventsControlCharacters`) continue to
+  pass in CI.
+
+### Offline verification
+
+- Fingerprinting uses `java.security.MessageDigest.getInstance("SHA-256")` —
+  JDK standard library, no network, no new dependencies.
+- `PersistenceManager.invalidateCachedArtifacts` uses local File I/O only.
+- No HTTP client, Retrofit, OkHttp, AI SDK, analytics, or cloud import was
+  added. `grep -r "import okhttp\|import retrofit\|import com.amplitude\|import com.google.cloud" app/src/main` returns zero matches.
+
+### Local test result
+
+The local Termux environment is constrained: the AGP-bundled AAPT2 daemon
+fails to start (`Aapt2DaemonStartupException`), preventing
+`:app:processDebugResources`. This is an environment limitation, not a code
+issue. The same failure occurs with the prior commits that the user has
+confirmed CI GREEN for (FIX12-B `b605cc9`, FIX13 audit `c4d4070`,
+FIX14 investigation `7ba3a17`).
+
+To avoid relying solely on local Gradle, the change was pushed to CI for
+verification. The reproduction test in `PdfArtifactStalenessTest.kt` mirrors
+the exact lifecycle (PDF write + sidecar write + sidecar read + fingerprint
+comparison) that `ensurePdfArtifact` executes in production, using only the
+public surface of `PdfArtifactManager`. No Android Context is required.
+
+### assembleDebug result
+
+CI run `33997821956` job `build-apk` step `Build Debug APK`:
+`BUILD SUCCESSFUL in 1m 31s`. APK artifact uploaded as `sulat-apk`.
+
+### GitHub Actions run
+
+- Run ID: `33997821956`
+- Workflow: `Build Sulat APK`
+- Trigger: push to `main`
+- Head SHA: `3793b78e48f36a74d7714123f3a3ed5c196fb17c`
+- Status: completed
+- Conclusion: success
+- Steps: all 11 steps succeeded (Checkout, JDK 17, Setup Android SDK,
+  Accept SDK licenses, Install SDK platform, Grant execute permission,
+  Build Debug APK, **Run Unit Tests**, Upload APK artifact, Post JDK 17,
+  Post Checkout, Complete job).
+
+### Commit SHA
+
+`3793b78e48f36a74d7714123f3a3ed5c196fb17c` (short: `3793b78`).
+
+### Final verdict
+
+**FIX14-B implemented and verified CI GREEN.**
+
+The FIX13 / FIX14 HIGH-severity staleness defect is closed:
+
+- The artifact identity contract is preserved (same draft + same content +
+  same paper size → same canonical path).
+- The artifact validity contract is now content-aware (PDF + matching
+  fingerprint sidecar).
+- Central persistence invalidation prevents future bypass via new call sites.
+- The orphan-PDF-after-delete finding from FIX13 is also addressed
+  (deleteDraft now invalidates cached artifacts across all paper sizes).
+- 32 new permanent regression tests cover the fingerprint contract and the
+  central staleness regression.
+- All existing tests continue to pass.
+- No new dependencies. No network / cloud / AI. No second PDF pipeline.
+
+---
