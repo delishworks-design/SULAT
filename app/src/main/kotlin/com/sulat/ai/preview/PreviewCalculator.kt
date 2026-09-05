@@ -1,33 +1,29 @@
 package com.sulat.ai.preview
 
+import com.sulat.ai.document.layout.PageGeometry
 import com.sulat.ai.document.renderer.PdfTextRole
 import com.sulat.ai.document.renderer.RenderPlan
 
 /**
- * Pure JVM preview calculator that computes scale and geometry from a [RenderPlan].
+ * Pure JVM preview calculator that computes scale and geometry from a [RenderPlan]
+ * and [PageGeometry] from the canonical DocumentLayout.
+ *
  * Contains no Android framework dependencies — fully unit-testable.
  * Preview and PDF share identical sections, typography, wrapping, and pagination.
+ *
+ * Geometry source: DocumentLayout.page → PageGeometry.
+ * No hardcoded paper dimensions. No hardcoded margins.
  */
 class PreviewCalculator(
     val renderPlan: RenderPlan,
+    val pageGeometry: PageGeometry,
     private val availableWidthPx: Int
 ) {
     val totalPages: Int get() = renderPlan.totalPages
 
-    private val firstPage get() = renderPlan.pages.firstOrNull()
+    val documentWidthPt: Double get() = pageGeometry.widthPt
 
-    private val contentHeightPt: Double
-        get() {
-            val page = firstPage ?: return 841.89
-            val maxYPt = page.lines.maxOfOrNull { it.yPt } ?: return 841.89
-            val lastLine = page.lines.last()
-            val lineHeight = lastLine.role.style.fontSizePt * lastLine.role.style.lineSpacingMultiplier
-            return maxYPt + lineHeight
-        }
-
-    val documentWidthPt: Double get() = 595.276
-
-    val documentHeightPt: Double get() = contentHeightPt
+    val documentHeightPt: Double get() = pageGeometry.heightPt
 
     val scale: Double
         get() = availableWidthPx.toDouble() / documentWidthPt
@@ -35,18 +31,22 @@ class PreviewCalculator(
     val pageWidthPx: Int get() = availableWidthPx
 
     val pageHeightPx: Int
-        get() = (contentHeightPt * scale).toInt()
+        get() = (documentHeightPt * scale).toInt()
 
-    fun textX(marginLeftPt: Double): Float {
+    val marginLeftPt: Double get() = pageGeometry.marginLeftPt
+
+    val marginTopPt: Double get() = pageGeometry.marginTopPt
+
+    fun textSizePx(role: PdfTextRole): Float {
+        return (role.style.fontSizePt * scale).toFloat()
+    }
+
+    fun textX(): Float {
         return (marginLeftPt * scale).toFloat()
     }
 
-    fun textY(yPt: Double, marginTopPt: Double): Float {
-        return ((marginTopPt + yPt) * scale).toFloat()
-    }
-
-    fun textSizeSp(role: PdfTextRole): Float {
-        return (role.style.fontSizePt * scale * 1.33).toFloat()
+    fun textY(yPt: Double): Float {
+        return (yPt * scale).toFloat()
     }
 
     fun lineSpacingPx(role: PdfTextRole): Float {

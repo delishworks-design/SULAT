@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.Toast
+import com.sulat.ai.data.persistence.PersistenceManager
 import com.sulat.ai.preview.PreviewActivity
 
 class MainActivity : Activity() {
@@ -14,21 +15,22 @@ class MainActivity : Activity() {
         setContentView(R.layout.activity_main)
 
         val container = findViewById<LinearLayout>(R.id.rootContainer)
-        container.removeAllViews()
 
-        val previewButton = Button(this).apply {
-            text = "Preview Letter"
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            )
+        val previewButton = container.findViewById<Button>(R.id.btnPreview)
+        if (previewButton != null) {
+            previewButton.setOnClickListener { openPreview() }
         }
-        previewButton.setOnClickListener {
-            val intent = Intent(this, PreviewActivity::class.java)
-            startActivity(intent)
-        }
-        container.addView(previewButton)
+    }
 
-        Toast.makeText(this, "Sulat - Offline Letter Creation", Toast.LENGTH_LONG).show()
+    private fun openPreview() {
+        val drafts = PersistenceManager.loadDrafts(this)
+        val draft = drafts.firstOrNull()
+        if (draft == null) {
+            Toast.makeText(this, "No letters to preview. Create a letter first.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        val intent = Intent(this, PreviewActivity::class.java)
+        intent.putExtra(PreviewActivity.EXTRA_DRAFT_ID, draft.id)
+        startActivity(intent)
     }
 }

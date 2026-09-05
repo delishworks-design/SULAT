@@ -2,29 +2,27 @@ package com.sulat.ai.preview
 
 import android.app.Activity
 import android.os.Bundle
+import android.view.View
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import com.sulat.ai.R
 import com.sulat.ai.data.model.LetterDraft
-import com.sulat.ai.data.model.LetterDate
-import com.sulat.ai.data.model.Recipient
-import com.sulat.ai.data.model.SenderProfile
+import com.sulat.ai.data.persistence.PersistenceManager
 import com.sulat.ai.document.PaperSize
-import com.sulat.ai.document.layout.DocumentLayout
 import com.sulat.ai.document.renderer.LetterTemplateEngine
 import com.sulat.ai.document.renderer.PdfContentCalculator
 
 /**
  * Activity that renders a letter preview using the same deterministic pipeline as PDF.
- * Accepts a [LetterDraft] via intent extra EXTRA_DRAFT.
- * If no draft is provided, a demo letter is rendered.
+ * Loads a draft by ID from PersistenceManager.
+ * Shows error state for missing/invalid drafts — no demo fallback.
  */
 class PreviewActivity : Activity() {
 
     companion object {
-        const val EXTRA_DRAFT = "extra_draft"
+        const val EXTRA_DRAFT_ID = "extra_draft_id"
     }
 
     private var calculator: PreviewCalculator? = null
@@ -33,27 +31,49 @@ class PreviewActivity : Activity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_preview)
 
-        val draft = intent.getSerializableExtra(EXTRA_DRAFT) as? LetterDraft
-            ?: createDemoDraft()
+        setupButtons()
 
-        val layout = buildLayout(draft)
-        val renderPlan = PdfContentCalculator(layout).plan()
+        val draftId = intent.getStringExtra(EXTRA_DRAFT_ID)
+        if (draftId.isNullOrBlank()) {
+            showError("No letter selected. Please choose a letter to preview.")
+            return
+        }
+
+        val draft = PersistenceManager.getDraft(this, draftId)
+        if (draft == null) {
+            showError("The letter data could not be loaded.")
+            return
+        }
+
+        val layout = try {
+            val engine = LetterTemplateEngine()
+            engine.buildLayout(draft, PaperSize.A4)
+        } catch (e: Exception) {
+            showError("Failed to generate letter layout.")
+            return
+        }
+
+        val renderPlan = try {
+            PdfContentCalculator(layout).plan()
+        } catch (e: Exception) {
+            showError("Failed to compute letter preview.")
+            return
+        }
+
+        if (renderPlan.pages.isEmpty()) {
+            showError("The letter has no content to preview.")
+            return
+        }
 
         val display = resources.displayMetrics
         val screenWidthPx = display.widthPixels
         val horizontalPaddingPx = (32 * resources.displayMetrics.density).toInt()
         val availableWidthPx = screenWidthPx - horizontalPaddingPx
 
-        calculator = PreviewCalculator(renderPlan, availableWidthPx)
+        calculator = PreviewCalculator(renderPlan, layout.page, availableWidthPx)
 
-        setupButtons()
         renderPages()
         updatePageInfo()
-    }
-
-    private fun buildLayout(draft: LetterDraft): DocumentLayout {
-        val engine = LetterTemplateEngine()
-        return engine.buildLayout(draft, PaperSize.A4)
     }
 
     private fun setupButtons() {
@@ -98,32 +118,18 @@ class PreviewActivity : Activity() {
         info.text = "Page 1 of ${calc.totalPages}"
     }
 
-    private fun createDemoDraft(): LetterDraft {
-        return LetterDraft(
-            id = "demo-preview",
-            recipients = listOf(
-                Recipient(
-                    id = "r1",
-                    name = "KA. JUAN DELA CRUZ",
-                    position = "Minister",
-                    organization = "Local Congregation of Example",
-                    address = "123 Example Street, Calamba, Laguna"
-                )
-            ),
-            dates = listOf(LetterDate(date = java.util.Date(1700000000000L), label = "Jan 1")),
-            body = "Peace be with you, brother.\n\n" +
-                "This is a formal request regarding the upcoming activity " +
-                "scheduled for next week. We would like to confirm the details " +
-                "and ensure that all necessary arrangements are in place.\n\n" +
-                "Maraming salamat po sa inyong pagkakataon. We look forward " +
-                "to your kind response at your earliest convenience.",
-            subject = "Request for Confirmation of Activity",
-            greeting = "Dear Brother,",
-            sender = SenderProfile(
-                name = "Lloyd Malto",
-                signature = "Faithfully yours,",
-                address = "456 Sender Street"
-            )
-        )
+    private fun showError(message: String) {
+        val container = findViewById<LinearLayout>(R.id.pageContainer)
+        container.removeAllViews()
+
+        val errorText = TextView(this).apply {
+            text = message
+            textSize = 16f
+            setPadding(32, 32, 32, 32)
+            textAlignment = View.TEXT_ALIGNMENT_CENTER
+        }
+        container.addView(errorText)
+
+        findViewById<TextView>(R.id.tvPageInfo).text = "Unable to preview"
     }
 }

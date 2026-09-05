@@ -5,6 +5,7 @@ import com.sulat.ai.data.model.LetterDate
 import com.sulat.ai.data.model.Recipient
 import com.sulat.ai.data.model.SenderProfile
 import com.sulat.ai.document.PaperSize
+import com.sulat.ai.document.layout.PageGeometry
 import com.sulat.ai.document.renderer.LetterTemplateEngine
 import com.sulat.ai.document.renderer.PdfContentCalculator
 import com.sulat.ai.document.renderer.PdfTextRole
@@ -49,7 +50,7 @@ class PreviewCalculatorTest {
     ): PreviewCalculator {
         val layout = engine.buildLayout(draft, paperSize)
         val renderPlan = PdfContentCalculator(layout).plan()
-        return PreviewCalculator(renderPlan, availableWidthPx)
+        return PreviewCalculator(renderPlan, layout.page, availableWidthPx)
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -59,7 +60,7 @@ class PreviewCalculatorTest {
     @Test
     fun testA4PageScaling() {
         val calc = makeCalculator(availableWidthPx = 1080, paperSize = PaperSize.A4)
-        val expectedScale = 1080.0 / 595.276
+        val expectedScale = 1080.0 / PaperSize.A4.widthPt
         assertEquals(expectedScale, calc.scale, 0.001)
     }
 
@@ -70,9 +71,10 @@ class PreviewCalculatorTest {
     }
 
     @Test
-    fun testA4PageHeightProportional() {
+    fun testA4PageHeightFromGeometry() {
         val calc = makeCalculator(availableWidthPx = 1080, paperSize = PaperSize.A4)
-        assertTrue("A4 page height must be positive", calc.pageHeightPx > 0)
+        val expectedHeight = (PaperSize.A4.heightPt * calc.scale).toInt()
+        assertEquals(expectedHeight, calc.pageHeightPx)
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -82,7 +84,7 @@ class PreviewCalculatorTest {
     @Test
     fun testLegalPageScaling() {
         val calc = makeCalculator(availableWidthPx = 1080, paperSize = PaperSize.Legal)
-        val expectedScale = 1080.0 / 595.276
+        val expectedScale = 1080.0 / PaperSize.Legal.widthPt
         assertEquals(expectedScale, calc.scale, 0.001)
     }
 
@@ -93,9 +95,17 @@ class PreviewCalculatorTest {
     }
 
     @Test
-    fun testLegalPageHeightProportional() {
+    fun testLegalPageHeightFromGeometry() {
         val calc = makeCalculator(availableWidthPx = 1080, paperSize = PaperSize.Legal)
-        assertTrue("Legal page height must be positive", calc.pageHeightPx > 0)
+        val expectedHeight = (PaperSize.Legal.heightPt * calc.scale).toInt()
+        assertEquals(expectedHeight, calc.pageHeightPx)
+    }
+
+    @Test
+    fun testLegalDiffersFromA4() {
+        val a4 = makeCalculator(availableWidthPx = 1080, paperSize = PaperSize.A4)
+        val legal = makeCalculator(availableWidthPx = 1080, paperSize = PaperSize.Legal)
+        assertTrue("Legal must be taller than A4", legal.pageHeightPx > a4.pageHeightPx)
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -105,7 +115,7 @@ class PreviewCalculatorTest {
     @Test
     fun testLongBondPageScaling() {
         val calc = makeCalculator(availableWidthPx = 1080, paperSize = PaperSize.LongBond)
-        val expectedScale = 1080.0 / 595.276
+        val expectedScale = 1080.0 / PaperSize.LongBond.widthPt
         assertEquals(expectedScale, calc.scale, 0.001)
     }
 
@@ -116,9 +126,17 @@ class PreviewCalculatorTest {
     }
 
     @Test
-    fun testLongBondPageHeightProportional() {
+    fun testLongBondPageHeightFromGeometry() {
         val calc = makeCalculator(availableWidthPx = 1080, paperSize = PaperSize.LongBond)
-        assertTrue("Long Bond page height must be positive", calc.pageHeightPx > 0)
+        val expectedHeight = (PaperSize.LongBond.heightPt * calc.scale).toInt()
+        assertEquals(expectedHeight, calc.pageHeightPx)
+    }
+
+    @Test
+    fun testLongBondDiffersFromLegal() {
+        val legal = makeCalculator(availableWidthPx = 1080, paperSize = PaperSize.Legal)
+        val longBond = makeCalculator(availableWidthPx = 1080, paperSize = PaperSize.LongBond)
+        assertTrue("Legal must be taller than Long Bond", legal.pageHeightPx > longBond.pageHeightPx)
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -128,9 +146,9 @@ class PreviewCalculatorTest {
     @Test
     fun testAspectRatioPreserved() {
         val calc = makeCalculator(availableWidthPx = 1080, paperSize = PaperSize.A4)
-        val ratio = calc.documentHeightPt / calc.documentWidthPt
+        val ptRatio = calc.documentHeightPt / calc.documentWidthPt
         val pxRatio = calc.pageHeightPx.toDouble() / calc.pageWidthPx
-        assertEquals("Aspect ratio must be preserved", ratio, pxRatio, 0.01)
+        assertEquals("Aspect ratio must be preserved", ptRatio, pxRatio, 0.01)
     }
 
     @Test
@@ -188,6 +206,23 @@ class PreviewCalculatorTest {
         assertNotNull("Recipient name must be present", nameLine)
         assertTrue("Prefix must contain KA.", prefixLine!!.text.contains("KA."))
         assertTrue("Name must contain JUAN DELA CRUZ", nameLine!!.text.contains("JUAN DELA CRUZ"))
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // CORRECT ROLES
+    // ════════════════════════════════════════════════════════════════════════
+
+    @Test
+    fun testCorrectRolesPresent() {
+        val calc = makeCalculator()
+        val allRoles = calc.renderPlan.pages.flatMap { it.lines }.map { it.role }.toSet()
+        assertTrue("DATE must be present", allRoles.contains(PdfTextRole.DATE))
+        assertTrue("RECIPIENT_NAME must be present", allRoles.contains(PdfTextRole.RECIPIENT_NAME))
+        assertTrue("SUBJECT must be present", allRoles.contains(PdfTextRole.SUBJECT))
+        assertTrue("GREETING must be present", allRoles.contains(PdfTextRole.GREETING))
+        assertTrue("BODY must be present", allRoles.contains(PdfTextRole.BODY))
+        assertTrue("CLOSING must be present", allRoles.contains(PdfTextRole.CLOSING))
+        assertTrue("SENDER_NAME must be present", allRoles.contains(PdfTextRole.SENDER_NAME))
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -338,11 +373,24 @@ class PreviewCalculatorTest {
         assertEquals("Total pages must be deterministic", calc1.totalPages, calc2.totalPages)
     }
 
+    // ════════════════════════════════════════════════════════════════════════
+    // TYPOGRAPHY — FONT SIZE SCALES FROM POINTS
+    // ════════════════════════════════════════════════════════════════════════
+
     @Test
-    fun testTextSizeDependsOnRole() {
+    fun testTextSizePxFromPoints() {
+        val calc = makeCalculator(availableWidthPx = 1080, paperSize = PaperSize.A4)
+        val scale = 1080.0 / PaperSize.A4.widthPt
+        val bodySizePx = calc.textSizePx(PdfTextRole.BODY)
+        val expectedPx = (PdfTextRole.BODY.style.fontSizePt * scale).toFloat()
+        assertEquals("Body text size must be fontSizePt × scale", expectedPx, bodySizePx, 0.1f)
+    }
+
+    @Test
+    fun testTextSizePxDependsOnRole() {
         val calc = makeCalculator()
-        val bodySize = calc.textSizeSp(PdfTextRole.BODY)
-        val subjectSize = calc.textSizeSp(PdfTextRole.SUBJECT)
+        val bodySize = calc.textSizePx(PdfTextRole.BODY)
+        val subjectSize = calc.textSizePx(PdfTextRole.SUBJECT)
         assertTrue("Subject font size must be positive", subjectSize > 0)
         assertTrue("Body font size must be positive", bodySize > 0)
     }
@@ -362,6 +410,32 @@ class PreviewCalculatorTest {
     }
 
     // ════════════════════════════════════════════════════════════════════════
+    // MARGINS FROM GEOMETRY
+    // ════════════════════════════════════════════════════════════════════════
+
+    @Test
+    fun testMarginsFromPageGeometry() {
+        val calc = makeCalculator(paperSize = PaperSize.A4)
+        assertEquals("Margin left must match PageGeometry", PaperSize.defaultMarginsPt().left, calc.marginLeftPt, 0.001)
+        assertEquals("Margin top must match PageGeometry", PaperSize.defaultMarginsPt().top, calc.marginTopPt, 0.001)
+    }
+
+    @Test
+    fun testDocumentDimensionsMatchPaperSize() {
+        val a4 = makeCalculator(paperSize = PaperSize.A4)
+        assertEquals(PaperSize.A4.widthPt, a4.documentWidthPt, 0.001)
+        assertEquals(PaperSize.A4.heightPt, a4.documentHeightPt, 0.001)
+
+        val legal = makeCalculator(paperSize = PaperSize.Legal)
+        assertEquals(PaperSize.Legal.widthPt, legal.documentWidthPt, 0.001)
+        assertEquals(PaperSize.Legal.heightPt, legal.documentHeightPt, 0.001)
+
+        val longBond = makeCalculator(paperSize = PaperSize.LongBond)
+        assertEquals(PaperSize.LongBond.widthPt, longBond.documentWidthPt, 0.001)
+        assertEquals(PaperSize.LongBond.heightPt, longBond.documentHeightPt, 0.001)
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
     // EXTREMELY LONG TEXT
     // ════════════════════════════════════════════════════════════════════════
 
@@ -370,6 +444,18 @@ class PreviewCalculatorTest {
         val longBody = "A".repeat(10000)
         val calc = makeCalculator(draft = makeDraft(body = longBody))
         assertTrue("Extremely long text must not crash", calc.totalPages >= 1)
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // EMPTY RENDERPLAN
+    // ════════════════════════════════════════════════════════════════════════
+
+    @Test
+    fun testEmptyRenderPlan() {
+        val emptyLayout = engine.buildLayout(makeDraft(body = ""), PaperSize.A4)
+        val renderPlan = PdfContentCalculator(emptyLayout).plan()
+        val calc = PreviewCalculator(renderPlan, emptyLayout.page, 1080)
+        assertTrue("Empty render plan must not crash", calc.totalPages >= 1)
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -382,9 +468,21 @@ class PreviewCalculatorTest {
         val layout = engine.buildLayout(draft, PaperSize.A4)
         val renderPlan = PdfContentCalculator(layout).plan()
 
-        val calc = PreviewCalculator(renderPlan, 1080)
+        val calc = PreviewCalculator(renderPlan, layout.page, 1080)
 
         assertEquals("Preview page count must match PDF", renderPlan.totalPages, calc.totalPages)
         assertEquals("Preview total pages must match", renderPlan.pages.size, calc.totalPages)
+    }
+
+    @Test
+    fun testPreviewGeometryMatchesPdf() {
+        val draft = makeDraft()
+        val layout = engine.buildLayout(draft, PaperSize.A4)
+        val renderPlan = PdfContentCalculator(layout).plan()
+
+        val calc = PreviewCalculator(renderPlan, layout.page, 1080)
+
+        assertEquals("Document width must match PageGeometry", layout.page.widthPt, calc.documentWidthPt, 0.001)
+        assertEquals("Document height must match PageGeometry", layout.page.heightPt, calc.documentHeightPt, 0.001)
     }
 }

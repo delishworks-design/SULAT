@@ -4,13 +4,14 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
-import android.graphics.Typeface
 import android.util.AttributeSet
 import android.view.View
+import com.sulat.ai.document.renderer.typefaceForStyle
 
 /**
  * Custom View that renders a single preview page using [PreviewCalculator].
  * Draws text lines at the exact coordinates computed by the deterministic pipeline.
+ * Uses DocumentLayout.page geometry — no hardcoded margins or font conversions.
  */
 class LetterPreviewView @JvmOverloads constructor(
     context: Context,
@@ -51,23 +52,15 @@ class LetterPreviewView @JvmOverloads constructor(
 
         canvas.drawRect(0f, 0f, width.toFloat(), height.toFloat(), bgPaint)
 
-        val marginLeftPt = 72.0
-        val marginTopPt = 72.0
-
         for (line in page.lines) {
             val role = line.role
             val style = role.style
 
-            textPaint.textSize = calc.textSizeSp(role)
-            textPaint.typeface = when {
-                style.isBold && style.isItalic -> Typeface.create(Typeface.DEFAULT, Typeface.BOLD_ITALIC)
-                style.isItalic -> Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
-                style.isBold -> Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                else -> Typeface.DEFAULT
-            }
+            textPaint.textSize = calc.textSizePx(role)
+            textPaint.typeface = typefaceForStyle(style)
 
-            val x = calc.textX(marginLeftPt)
-            val y = calc.textY(line.yPt, marginTopPt)
+            val x = calc.textX()
+            val y = calc.textY(line.yPt)
 
             canvas.drawText(line.text, x, y, textPaint)
         }
