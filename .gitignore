@@ -5,6 +5,7 @@ build/
 
 # Local properties
 local.properties
+**/local.properties
 
 # IDE
 *.iml
