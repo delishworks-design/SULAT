@@ -46,6 +46,7 @@ dependencies {
     implementation "androidx.core:core-ktx:1.15.0"
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.4'
     testImplementation "junit:junit:4.13.2"
+    testImplementation "org.json:json:20240303"
     androidTestImplementation "junit:junit:4.13.2"
     androidTestImplementation "androidx.test:runner:1.6.2"
     androidTestImplementation "androidx.test:rules:1.6.1"
