@@ -23,6 +23,7 @@ class PreviewActivity : Activity() {
 
     companion object {
         const val EXTRA_DRAFT_ID = "extra_draft_id"
+        const val EXTRA_PAPER_SIZE = "extra_paper_size"
     }
 
     private var calculator: PreviewCalculator? = null
@@ -45,9 +46,16 @@ class PreviewActivity : Activity() {
             return
         }
 
+        val paperSizeName = intent.getStringExtra(EXTRA_PAPER_SIZE)
+        val paperSize = try {
+            if (paperSizeName != null) PaperSize.valueOf(paperSizeName) else PaperSize.A4
+        } catch (_: IllegalArgumentException) {
+            PaperSize.A4
+        }
+
         val layout = try {
             val engine = LetterTemplateEngine()
-            engine.buildLayout(draft, PaperSize.A4)
+            engine.buildLayout(draft, paperSize)
         } catch (e: Exception) {
             showError("Failed to generate letter layout.")
             return

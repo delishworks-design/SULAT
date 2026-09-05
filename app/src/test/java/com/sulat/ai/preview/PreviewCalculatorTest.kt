@@ -485,4 +485,51 @@ class PreviewCalculatorTest {
         assertEquals("Document width must match PageGeometry", layout.page.widthPt, calc.documentWidthPt, 0.001)
         assertEquals("Document height must match PageGeometry", layout.page.heightPt, calc.documentHeightPt, 0.001)
     }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // PRODUCTION DEFAULT PATH — A4
+    // ════════════════════════════════════════════════════════════════════════
+
+    @Test
+    fun testProductionDefaultIsA4() {
+        val draft = makeDraft()
+        val layout = engine.buildLayout(draft, PaperSize.A4)
+        val renderPlan = PdfContentCalculator(layout).plan()
+        val calc = PreviewCalculator(renderPlan, layout.page, 1080)
+
+        assertEquals("Default paper width must be A4", PaperSize.A4.widthPt, calc.documentWidthPt, 0.001)
+        assertEquals("Default paper height must be A4", PaperSize.A4.heightPt, calc.documentHeightPt, 0.001)
+        assertEquals("Default scale must match A4", 1080.0 / PaperSize.A4.widthPt, calc.scale, 0.001)
+    }
+
+    @Test
+    fun testProductionConstructionPathDefaultsA4() {
+        val draft = makeDraft()
+        val layout = engine.buildLayout(draft, PaperSize.A4)
+        val renderPlan = PdfContentCalculator(layout).plan()
+        val calc = PreviewCalculator(renderPlan, layout.page, 1080)
+
+        assertTrue("Production path must have at least 1 page", calc.totalPages >= 1)
+        assertTrue("Production page height must be positive", calc.pageHeightPx > 0)
+        assertEquals("Production path must use A4 geometry",
+            (PaperSize.A4.heightPt * calc.scale).toInt(), calc.pageHeightPx)
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // LEGAL / LONG BOND — UNIT-LEVEL ONLY (not in production activity yet)
+    // ════════════════════════════════════════════════════════════════════════
+
+    @Test
+    fun testLegalGeometryCorrect() {
+        val calc = makeCalculator(paperSize = PaperSize.Legal)
+        assertEquals(PaperSize.Legal.widthPt, calc.documentWidthPt, 0.001)
+        assertEquals(PaperSize.Legal.heightPt, calc.documentHeightPt, 0.001)
+    }
+
+    @Test
+    fun testLongBondGeometryCorrect() {
+        val calc = makeCalculator(paperSize = PaperSize.LongBond)
+        assertEquals(PaperSize.LongBond.widthPt, calc.documentWidthPt, 0.001)
+        assertEquals(PaperSize.LongBond.heightPt, calc.documentHeightPt, 0.001)
+    }
 }
