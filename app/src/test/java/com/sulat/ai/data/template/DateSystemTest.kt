@@ -251,10 +251,10 @@ class DateSystemTest {
 
     @Test
     fun testSelectSpecificWeekDates_firstWeek_sept2026() {
-        // First week of Sep 2026 starting from Monday:
-        // Week of Sep 1 (Tue): Sep 1(Tue), 2(Wed), 3(Thu), 4(Fri)
+        // First Monday of Sep 2026 = Sep 7
+        // Week 1 = Sep 7 (Mon) through Sep 13 (Sun), weekdays only: Sep 7,8,9,10,11
         val dates = DateSystem.selectSpecificWeekDates(1, 2026, 9)
-        assertEquals(4, dates.size) // Tue, Wed, Thu, Fri
+        assertEquals(5, dates.size) // Mon, Tue, Wed, Thu, Fri of that week
     }
 
     // ── Utility functions ─────────────────────────────────────────────────
