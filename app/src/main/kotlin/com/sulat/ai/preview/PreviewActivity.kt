@@ -14,6 +14,7 @@ import com.sulat.ai.document.PaperSize
 import com.sulat.ai.document.renderer.LetterTemplateEngine
 import com.sulat.ai.document.renderer.PdfContentCalculator
 import com.sulat.ai.print.PrintHelper
+import com.sulat.ai.share.ShareHelper
 
 /**
  * Activity that renders a letter preview using the same deterministic pipeline as PDF.
@@ -98,7 +99,15 @@ class PreviewActivity : Activity() {
             Toast.makeText(this, "Save PDF — coming in FIX 6B", Toast.LENGTH_SHORT).show()
         }
         findViewById<Button>(R.id.btnShare).setOnClickListener {
-            Toast.makeText(this, "Share — coming in FIX 6C", Toast.LENGTH_SHORT).show()
+            val draft = currentDraft
+            if (draft == null) {
+                Toast.makeText(this, "No letter loaded to share.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val result = ShareHelper.generateAndShare(this, draft, currentPaperSize)
+            if (!result.success) {
+                Toast.makeText(this, "Share failed: ${result.error}", Toast.LENGTH_LONG).show()
+            }
         }
         findViewById<Button>(R.id.btnPrint).setOnClickListener {
             val draft = currentDraft
