@@ -26,10 +26,9 @@ object PdfArtifactManager {
         val safeSubject = sanitizeForFilename(draft.subject.ifEmpty {
             draft.recipients.firstOrNull()?.name ?: "Letter"
         })
-        val dateStr = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.US)
-            .format(java.util.Date(draft.createdTime))
+        val safeDraftId = sanitizeForFilename(draft.id)
         val paperSizeSuffix = paperSize.name
-        return "Sulat-${safeSubject}-${dateStr}-${paperSizeSuffix}.pdf"
+        return "Sulat-${safeDraftId}-${safeSubject}-${paperSizeSuffix}.pdf"
     }
 
     /**
@@ -56,7 +55,7 @@ object PdfArtifactManager {
     ): ArtifactResult {
         val artifactFile = getArtifactPath(context, draft, paperSize)
 
-        if (isValidArtifact(artifactFile, draft, paperSize)) {
+        if (isValidArtifact(context, artifactFile, draft, paperSize)) {
             return ArtifactResult(success = true, artifact = artifactFile)
         }
 
@@ -97,8 +96,9 @@ object PdfArtifactManager {
 
     /**
      * Check if an artifact file is valid for the given draft and paper size.
+     * Uses the provided context to calculate the expected path.
      */
-    fun isValidArtifact(artifact: File, draft: LetterDraft, paperSize: PaperSize): Boolean {
+    fun isValidArtifact(context: Context, artifact: File, draft: LetterDraft, paperSize: PaperSize): Boolean {
         if (!artifact.exists() || !artifact.isFile || artifact.length() == 0L) {
             return false
         }
@@ -107,7 +107,7 @@ object PdfArtifactManager {
             return false
         }
 
-        val expectedPath = getArtifactPath(android.app.Application(), draft, paperSize)
+        val expectedPath = getArtifactPath(context, draft, paperSize)
         if (artifact.canonicalPath != expectedPath.canonicalPath) {
             return false
         }
