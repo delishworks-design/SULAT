@@ -985,6 +985,329 @@ class PdfContentCalculatorTest {
     }
 
     // ════════════════════════════════════════════════════════════════════════
+    // FIX 5C — WHITESPACE PRESERVATION
+    // Deterministic policy: lines.joinToString("") must reconstruct all source
+    // characters in order. Line breaks are synthetic; concatenating lines must
+    // equal the original source text.
+    // ════════════════════════════════════════════════════════════════════════
+
+    private fun flattenedCodePoints(lines: List<RenderLine>): List<Int> {
+        val combined = lines.joinToString("") { it.text }
+        val codePoints = mutableListOf<Int>()
+        var i = 0
+        while (i < combined.length) {
+            val cp = combined.codePointAt(i)
+            codePoints.add(cp)
+            i += Character.charCount(cp)
+        }
+        return codePoints
+    }
+
+    private fun sourceCodePoints(text: String): List<Int> {
+        val codePoints = mutableListOf<Int>()
+        var i = 0
+        while (i < text.length) {
+            val cp = text.codePointAt(i)
+            codePoints.add(cp)
+            i += Character.charCount(cp)
+        }
+        return codePoints
+    }
+
+    @Test
+    fun testFiveConsecutiveSpacesPreserved() {
+        val body = "Hello     world"
+        val layout = makeLayout(body = body)
+        val plan = PdfContentCalculator(layout).plan()
+        val bodyLines = plan.bodyLines()
+        val reconstructed = bodyLines.joinToString("") { it.text }
+        val origCPs = sourceCodePoints(body)
+        val reconCPs = sourceCodePoints(reconstructed)
+        assertEquals("Five consecutive spaces must be preserved as code points", origCPs, reconCPs)
+    }
+
+    @Test
+    fun testLeadingSpacesPreserved() {
+        val body = "   Hello world"
+        val layout = makeLayout(body = body)
+        val plan = PdfContentCalculator(layout).plan()
+        val bodyLines = plan.bodyLines()
+        val reconstructed = bodyLines.joinToString("") { it.text }
+        val origCPs = sourceCodePoints(body)
+        val reconCPs = sourceCodePoints(reconstructed)
+        assertEquals("Leading spaces must be preserved as code points", origCPs, reconCPs)
+    }
+
+    @Test
+    fun testTrailingSpacesPreserved() {
+        val body = "Hello world   "
+        val layout = makeLayout(body = body)
+        val plan = PdfContentCalculator(layout).plan()
+        val bodyLines = plan.bodyLines()
+        val reconstructed = bodyLines.joinToString("") { it.text }
+        val origCPs = sourceCodePoints(body)
+        val reconCPs = sourceCodePoints(reconstructed)
+        assertEquals("Trailing spaces must be preserved as code points", origCPs, reconCPs)
+    }
+
+    @Test
+    fun testLeadingAndTrailingSpacesPreserved() {
+        val body = "  Hello world  "
+        val layout = makeLayout(body = body)
+        val plan = PdfContentCalculator(layout).plan()
+        val bodyLines = plan.bodyLines()
+        val reconstructed = bodyLines.joinToString("") { it.text }
+        val origCPs = sourceCodePoints(body)
+        val reconCPs = sourceCodePoints(reconstructed)
+        assertEquals("Leading and trailing spaces must be preserved as code points", origCPs, reconCPs)
+    }
+
+    @Test
+    fun testSpacesNearWrapBoundaryPreserved() {
+        val longText = "A  " + "word ".repeat(80)
+        val layout = makeLayout(body = longText)
+        val plan = PdfContentCalculator(layout).plan()
+        val bodyLines = plan.bodyLines()
+        val reconstructed = bodyLines.joinToString("") { it.text }
+        val origCPs = sourceCodePoints(longText)
+        val reconCPs = sourceCodePoints(reconstructed)
+        assertEquals("Spaces near wrap boundary must be preserved as code points", origCPs, reconCPs)
+    }
+
+    @Test
+    fun testWhitespacePlusLongToken() {
+        val longToken = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        val body = "Hello  $longToken"
+        val layout = makeLayout(body = body)
+        val plan = PdfContentCalculator(layout).plan()
+        val bodyLines = plan.bodyLines()
+        val reconstructed = bodyLines.joinToString("") { it.text }
+        val origCPs = sourceCodePoints(body)
+        val reconCPs = sourceCodePoints(reconstructed)
+        assertEquals("Whitespace + long token must preserve all code points", origCPs, reconCPs)
+    }
+
+    @Test
+    fun testWhitespacePlusUnicodeToken() {
+        val body = "Hello  🎉🎉🎉  world"
+        val layout = makeLayout(body = body)
+        val plan = PdfContentCalculator(layout).plan()
+        val bodyLines = plan.bodyLines()
+        val reconstructed = bodyLines.joinToString("") { it.text }
+        val origCPs = sourceCodePoints(body)
+        val reconCPs = sourceCodePoints(reconstructed)
+        assertEquals("Whitespace + Unicode must preserve all code points", origCPs, reconCPs)
+    }
+
+    @Test
+    fun testCodePointPreservationAcrossWrapping() {
+        val body = "A  B  C  D  E  F  G"
+        val layout = makeLayout(body = body)
+        val plan = PdfContentCalculator(layout).plan()
+        val bodyLines = plan.bodyLines()
+        val origCPs = sourceCodePoints(body)
+        val reconCPs = flattenedCodePoints(bodyLines)
+        assertEquals("Flattened code-point sequence must equal source", origCPs, reconCPs)
+    }
+
+    @Test
+    fun testAllWhitespacePreservedDeterministic() {
+        val body = "Hello   world     foo bar"
+        val l1 = PdfContentCalculator(makeLayout(body = body)).plan().bodyLines()
+        val l2 = PdfContentCalculator(makeLayout(body = body)).plan().bodyLines()
+        val r1 = l1.joinToString("") { it.text }
+        val r2 = l2.joinToString("") { it.text }
+        assertEquals("Whitespace preservation must be deterministic", r1, r2)
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // FIX 5C — UNICODE COMPREHENSIVE
+    // ════════════════════════════════════════════════════════════════════════
+
+    @Test
+    fun testNoIsolatedHighSurrogate() {
+        val body = "Hello \uD83D\uDE00 world"
+        val layout = makeLayout(body = body)
+        val plan = PdfContentCalculator(layout).plan()
+        val bodyLines = plan.bodyLines()
+        for (line in bodyLines) {
+            val text = line.text
+            var i = 0
+            while (i < text.length) {
+                val cp = text.codePointAt(i)
+                val cc = Character.charCount(cp)
+                if (Character.isHighSurrogate(text[i])) {
+                    assertTrue(
+                        "High surrogate must be followed by low surrogate at index $i in line '${text.take(40)}'",
+                        i + 1 < text.length && Character.isLowSurrogate(text[i + 1])
+                    )
+                }
+                i += cc
+            }
+        }
+    }
+
+    @Test
+    fun testNoIsolatedLowSurrogate() {
+        val body = "Hello \uD83D\uDE00 world"
+        val layout = makeLayout(body = body)
+        val plan = PdfContentCalculator(layout).plan()
+        val bodyLines = plan.bodyLines()
+        for (line in bodyLines) {
+            val text = line.text
+            var i = 0
+            while (i < text.length) {
+                val cp = text.codePointAt(i)
+                if (Character.isLowSurrogate(text[i])) {
+                    assertTrue(
+                        "Low surrogate at index $i must be preceded by high surrogate in line '${text.take(40)}'",
+                        i > 0 && Character.isHighSurrogate(text[i - 1])
+                    )
+                }
+                i += Character.charCount(cp)
+            }
+        }
+    }
+
+    @Test
+    fun testFlattenedCodePointSequenceEqualsSource() {
+        val body = "Hello  world 🎉🎉🎉 Mabuhay Pilipinas"
+        val layout = makeLayout(body = body)
+        val plan = PdfContentCalculator(layout).plan()
+        val bodyLines = plan.bodyLines()
+        val origCPs = sourceCodePoints(body)
+        val reconCPs = flattenedCodePoints(bodyLines)
+        assertEquals("Flattened code-point sequence must equal source", origCPs, reconCPs)
+    }
+
+    @Test
+    fun testUnicodeWrappingRemainsDeterministic() {
+        val body = "Hello 🎉🎉🎉 world 🌍🌍"
+        val l1 = PdfContentCalculator(makeLayout(body = body)).plan().bodyLines()
+        val l2 = PdfContentCalculator(makeLayout(body = body)).plan().bodyLines()
+        val r1 = l1.joinToString("") { it.text }
+        val r2 = l2.joinToString("") { it.text }
+        assertEquals("Unicode wrapping must be deterministic", r1, r2)
+    }
+
+    @Test
+    fun testMabuhayPilipinas() {
+        val body = "Mabuhay 🎉 Pilipinas"
+        val layout = makeLayout(body = body)
+        val plan = PdfContentCalculator(layout).plan()
+        val bodyLines = plan.bodyLines()
+        val origCPs = sourceCodePoints(body)
+        val reconCPs = flattenedCodePoints(bodyLines)
+        assertEquals("Mabuhay 🎉 Pilipinas must preserve all code points", origCPs, reconCPs)
+    }
+
+    @Test
+    fun testEmojiCodePointCountPreservedAfterWrapping() {
+        val emoji = "🎉".repeat(80)
+        val layout = makeLayout(body = emoji)
+        val plan = PdfContentCalculator(layout).plan()
+        val bodyLines = plan.bodyLines()
+        val reconstructed = bodyLines.joinToString("") { it.text }
+        val origCPs = sourceCodePoints(emoji)
+        val reconCPs = sourceCodePoints(reconstructed)
+        assertEquals("Emoji code-point count must be preserved after wrapping", origCPs, reconCPs)
+    }
+
+    @Test
+    fun testSupplementaryCodePointCountPreservedAfterWrapping() {
+        val supplementary = "\uD83D\uDE00".repeat(50)
+        val layout = makeLayout(body = supplementary)
+        val plan = PdfContentCalculator(layout).plan()
+        val bodyLines = plan.bodyLines()
+        val reconstructed = bodyLines.joinToString("") { it.text }
+        val origCPs = sourceCodePoints(supplementary)
+        val reconCPs = sourceCodePoints(reconstructed)
+        assertEquals("Supplementary code-point count must be preserved after wrapping", origCPs, reconCPs)
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // FIX 5C — ESTIMATOR CODE-POINT SAFETY
+    // ════════════════════════════════════════════════════════════════════════
+
+    @Test
+    fun testEstimatorHandlesASCII() {
+        val m = DeterministicTextMeasurer()
+        val maxChars = m.estimateMaxCharsForWidth("Hello World", PdfTextRole.BODY, 200.0)
+        assertTrue("Estimator must return at least 1 for ASCII", maxChars >= 1)
+        assertTrue("Estimator must handle ASCII without error", maxChars <= 200)
+    }
+
+    @Test
+    fun testEstimatorHandlesEmoji() {
+        val m = DeterministicTextMeasurer()
+        val maxChars = m.estimateMaxCharsForWidth("🎉🎉🎉🎉🎉", PdfTextRole.BODY, 200.0)
+        assertTrue("Estimator must return at least 1 for emoji", maxChars >= 1)
+    }
+
+    @Test
+    fun testEstimatorHandlesSupplementaryUnicode() {
+        val m = DeterministicTextMeasurer()
+        val maxChars = m.estimateMaxCharsForWidth("\uD83D\uDE00\uD83D\uDE00\uD83D\uDE00", PdfTextRole.BODY, 200.0)
+        assertTrue("Estimator must return at least 1 for supplementary Unicode", maxChars >= 1)
+    }
+
+    @Test
+    fun testEstimatorNeverTreatsSurrogatePairAsTwoChars() {
+        val m = DeterministicTextMeasurer()
+        val style = PdfTextRole.BODY.style
+        val cpCount = codePointCount("🎉🎉🎉")
+        val charWidth = m.measureTextWidth("🎉", style)
+        val totalWidth = cpCount * charWidth
+        val maxChars = m.estimateMaxCharsForWidth("🎉🎉🎉🎉🎉", PdfTextRole.BODY, totalWidth)
+        assertTrue(
+            "Estimator must count code points not UTF-16 units: cpCount=$cpCount, maxChars=$maxChars",
+            maxChars >= cpCount - 1
+        )
+    }
+
+    @Test
+    fun testEstimatorRemainsDeterministic() {
+        val m = DeterministicTextMeasurer()
+        val r1 = m.estimateMaxCharsForWidth("Hello 🎉 World", PdfTextRole.BODY, 150.0)
+        val r2 = m.estimateMaxCharsForWidth("Hello 🎉 World", PdfTextRole.BODY, 150.0)
+        assertEquals("Estimator must be deterministic", r1, r2)
+    }
+
+    @Test
+    fun testEstimatorWithLongUnicodeText() {
+        val m = DeterministicTextMeasurer()
+        val longText = "🎉".repeat(100)
+        val maxChars = m.estimateMaxCharsForWidth(longText, PdfTextRole.BODY, 50.0)
+        assertTrue("Estimator must handle long Unicode text without error", maxChars >= 1)
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // FIX 5C — CODE-POINT COUNT HELPER
+    // ════════════════════════════════════════════════════════════════════════
+
+    @Test
+    fun testCodePointCountASCII() {
+        assertEquals(5, codePointCount("Hello"))
+    }
+
+    @Test
+    fun testCodePointCountEmoji() {
+        assertEquals(3, codePointCount("🎉🎉🎉"))
+    }
+
+    @Test
+    fun testCodePointCountSupplementary() {
+        assertEquals(3, codePointCount("\uD83D\uDE00\uD83D\uDE00\uD83D\uDE00"))
+    }
+
+    @Test
+    fun testCodePointCountMixed() {
+        val text = "Hello 🎉 World"
+        val expected = 13 // H-e-l-l-o-spc-🎉-spc-W-o-r-l-d
+        assertEquals(expected, codePointCount(text))
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
     // FIX 5B — CHARACTER-PRESERVATION INVARIANT
     // ════════════════════════════════════════════════════════════════════════
 

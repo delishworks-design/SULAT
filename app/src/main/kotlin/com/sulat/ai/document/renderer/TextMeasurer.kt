@@ -17,11 +17,27 @@ interface TextMeasurer {
     fun measureTextWidth(text: String, style: PdfTextStyle): Double
 
     /**
-     * Returns the maximum number of characters of text styled with [role]'s style
+     * Returns the maximum number of Unicode code points of text styled with [role]'s style
      * that fit in [widthPt]pt.
      * Used as a starting point for character-level splitting of long unbreakable tokens.
+     * Must iterate over code points, not UTF-16 code units.
      */
     fun estimateMaxCharsForWidth(text: String, role: PdfTextRole, widthPt: Double): Int
+}
+
+/**
+ * Count the number of Unicode code points in [text].
+ * Uses code-point iteration to avoid counting surrogate pairs as two characters.
+ */
+fun codePointCount(text: String): Int {
+    var count = 0
+    var i = 0
+    while (i < text.length) {
+        val cp = text.codePointAt(i)
+        count++
+        i += Character.charCount(cp)
+    }
+    return count
 }
 
 /**
@@ -30,6 +46,7 @@ interface TextMeasurer {
  * consistent with monospaced-like estimation. All measurements are
  * deterministic — same input always produces same output.
  * Handles bold (1.05×) and italic (1.03×) width variations.
+ * Counts Unicode code points, not UTF-16 code units.
  */
 class DeterministicTextMeasurer : TextMeasurer {
 
@@ -39,7 +56,8 @@ class DeterministicTextMeasurer : TextMeasurer {
         var ratio = charWidthRatio
         if (style.isBold) ratio *= 1.05
         if (style.isItalic) ratio *= 1.03
-        return text.length * style.fontSizePt * ratio
+        val cpCount = codePointCount(text)
+        return cpCount * style.fontSizePt * ratio
     }
 
     override fun estimateMaxCharsForWidth(text: String, role: PdfTextRole, widthPt: Double): Int {
@@ -74,11 +92,19 @@ class AndroidPdfTextMeasurer : TextMeasurer {
     override fun estimateMaxCharsForWidth(text: String, role: PdfTextRole, widthPt: Double): Int {
         val style = role.style
         var accWidth = 0.0
-        for (i in text.indices) {
-            val charWidth = measureTextWidth(text.substring(i, i + 1), style)
+        var i = 0
+        while (i < text.length) {
+            val cp = text.codePointAt(i)
+            val charCount = Character.charCount(cp)
+            val charStr = text.substring(i, i + charCount)
+            val charWidth = measureTextWidth(charStr, style)
             accWidth += charWidth
-            if (accWidth > widthPt) return i.coerceAtLeast(1)
+            if (accWidth > widthPt) {
+                val codePointsBefore = codePointCount(text.substring(0, i))
+                return codePointsBefore.coerceAtLeast(1)
+            }
+            i += charCount
         }
-        return text.length
+        return codePointCount(text)
     }
 }

@@ -211,8 +211,18 @@ class PdfContentCalculator(
 
     /**
      * Width-aware text wrapping that preserves consecutive spaces.
-     * Space tokens handle all inter-word spacing; word tokens append directly.
-     * Falls back to character-level splitting for tokens wider than [maxWidthPt] (Issue 3 — Unicode-safe).
+     *
+     * Deterministic whitespace policy:
+     * - Source characters are never deleted during wrapping.
+     * - Space tokens handle all inter-word spacing.
+     * - When a space token fits on the current line, it is appended.
+     * - When a space token does not fit, the current line is flushed
+     *   and the space becomes leading content on the next line.
+     * - Leading spaces at the start of the text are preserved on the first line.
+     * - The invariant: lines.joinToString("") produces a string containing
+     *   all source characters in their original order.
+     *
+     * Falls back to character-level splitting for tokens wider than [maxWidthPt].
      */
     private fun wrapTextWidthAware(text: String, role: PdfTextRole, maxWidthPt: Double): List<String> {
         if (text.isEmpty()) return listOf(text)
@@ -230,25 +240,32 @@ class PdfContentCalculator(
             return textMeasurer.measureTextWidth(currentLine.toString(), style)
         }
 
+        fun flushLine() {
+            if (currentLine.isNotEmpty()) {
+                lines.add(currentLine.toString())
+                currentLine = StringBuilder()
+            }
+        }
+
         for (token in tokens) {
             if (token.isSpace) {
-                if (currentLine.isEmpty()) {
-                    continue
-                }
                 val spaceWidth = textMeasurer.measureTextWidth(token.text, style)
-                if (currentLineWidth() + spaceWidth <= maxWidthPt) {
+                if (spaceWidth > maxWidthPt) {
+                    flushLine()
+                    val splitChunks = splitLongTokenUnicodeSafe(token.text, role, maxWidthPt)
+                    for (chunk in splitChunks) {
+                        lines.add(chunk)
+                    }
+                } else if (currentLineWidth() + spaceWidth <= maxWidthPt) {
                     currentLine.append(token.text)
                 } else {
-                    lines.add(currentLine.toString())
-                    currentLine = StringBuilder()
+                    flushLine()
+                    currentLine.append(token.text)
                 }
             } else {
                 val tokenWidth = textMeasurer.measureTextWidth(token.text, style)
                 if (tokenWidth > maxWidthPt) {
-                    if (currentLine.isNotEmpty()) {
-                        lines.add(currentLine.toString())
-                        currentLine = StringBuilder()
-                    }
+                    flushLine()
                     val splitChunks = splitLongTokenUnicodeSafe(token.text, role, maxWidthPt)
                     for (chunk in splitChunks) {
                         lines.add(chunk)
@@ -263,8 +280,8 @@ class PdfContentCalculator(
                     if (candidateWidth <= maxWidthPt) {
                         currentLine.append(token.text)
                     } else {
-                        lines.add(currentLine.toString())
-                        currentLine = StringBuilder(token.text)
+                        flushLine()
+                        currentLine.append(token.text)
                     }
                 }
             }
