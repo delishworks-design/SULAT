@@ -2,7 +2,6 @@ package com.sulat.ai.document.renderer
 
 import android.graphics.Canvas
 import android.graphics.Paint
-import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
 import com.sulat.ai.data.model.LetterDraft
 import com.sulat.ai.document.PaperSize
@@ -117,14 +116,7 @@ class PdfRenderer {
         for (line in renderPage.lines) {
             val style = line.role.style
             paint.textSize = style.fontSizePt.toFloat()
-            paint.isFakeBoldText = style.isBold
-
-            paint.typeface = when {
-                style.isItalic && style.isBold -> Typeface.create(Typeface.DEFAULT, Typeface.BOLD_ITALIC)
-                style.isItalic -> Typeface.create(Typeface.DEFAULT, Typeface.ITALIC)
-                style.isBold -> Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                else -> Typeface.DEFAULT
-            }
+            paint.typeface = typefaceForStyle(style)
 
             canvas.drawText(
                 line.text,

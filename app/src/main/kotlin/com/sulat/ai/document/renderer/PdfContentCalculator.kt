@@ -4,7 +4,6 @@ import com.sulat.ai.document.layout.DocumentLayout
 import com.sulat.ai.document.layout.LayoutSection
 import com.sulat.ai.document.layout.Paragraph
 import com.sulat.ai.document.layout.RecipientEntry
-import kotlin.math.round
 
 data class RenderLine(
     val text: String,
@@ -183,55 +182,89 @@ class PdfContentCalculator(
         }
     }
 
+    /**
+     * Whitespace-aware token: represents either a word or a run of spaces.
+     * Preserves consecutive spaces exactly as they appear in the source text.
+     */
+    private data class Token(val text: String, val isSpace: Boolean)
+
+    /**
+     * Tokenize [text] into words and space runs, preserving consecutive spaces.
+     * "Hello  world" → [Token("Hello", false), Token("  ", true), Token("world", false)]
+     */
+    private fun tokenizePreservingSpaces(text: String): List<Token> {
+        val tokens = mutableListOf<Token>()
+        var i = 0
+        while (i < text.length) {
+            if (text[i] == ' ') {
+                val start = i
+                while (i < text.length && text[i] == ' ') i++
+                tokens.add(Token(text.substring(start, i), true))
+            } else {
+                val start = i
+                while (i < text.length && text[i] != ' ') i++
+                tokens.add(Token(text.substring(start, i), false))
+            }
+        }
+        return tokens
+    }
+
+    /**
+     * Width-aware text wrapping that preserves consecutive spaces.
+     * Space tokens handle all inter-word spacing; word tokens append directly.
+     * Falls back to character-level splitting for tokens wider than [maxWidthPt] (Issue 3 — Unicode-safe).
+     */
     private fun wrapTextWidthAware(text: String, role: PdfTextRole, maxWidthPt: Double): List<String> {
         if (text.isEmpty()) return listOf(text)
 
         val style = role.style
-        val totalWidth = textMeasurer.measureTextWidth(text, style.fontSizePt, style.isBold)
+        val totalWidth = textMeasurer.measureTextWidth(text, style)
         if (totalWidth <= maxWidthPt) return listOf(text)
 
-        val words = text.split(" ")
+        val tokens = tokenizePreservingSpaces(text)
         val lines = mutableListOf<String>()
         var currentLine = StringBuilder()
 
-        for (word in words) {
-            if (currentLine.isEmpty()) {
-                if (word.isEmpty()) {
+        fun currentLineWidth(): Double {
+            if (currentLine.isEmpty()) return 0.0
+            return textMeasurer.measureTextWidth(currentLine.toString(), style)
+        }
+
+        for (token in tokens) {
+            if (token.isSpace) {
+                if (currentLine.isEmpty()) {
                     continue
                 }
-                val wordWidth = textMeasurer.measureTextWidth(word, style.fontSizePt, style.isBold)
-                if (wordWidth > maxWidthPt) {
+                val spaceWidth = textMeasurer.measureTextWidth(token.text, style)
+                if (currentLineWidth() + spaceWidth <= maxWidthPt) {
+                    currentLine.append(token.text)
+                } else {
+                    lines.add(currentLine.toString())
+                    currentLine = StringBuilder()
+                }
+            } else {
+                val tokenWidth = textMeasurer.measureTextWidth(token.text, style)
+                if (tokenWidth > maxWidthPt) {
                     if (currentLine.isNotEmpty()) {
                         lines.add(currentLine.toString())
                         currentLine = StringBuilder()
                     }
-                    val splitTokens = splitLongToken(word, role, maxWidthPt)
-                    for (token in splitTokens) {
-                        if (token.isNotEmpty()) {
-                            lines.add(token)
-                        }
+                    val splitChunks = splitLongTokenUnicodeSafe(token.text, role, maxWidthPt)
+                    for (chunk in splitChunks) {
+                        lines.add(chunk)
                     }
                 } else {
-                    currentLine.append(word)
-                }
-            } else {
-                val candidate = currentLine.toString() + " " + word
-                val candidateWidth = textMeasurer.measureTextWidth(candidate, style.fontSizePt, style.isBold)
-                if (candidateWidth <= maxWidthPt) {
-                    currentLine.append(" ").append(word)
-                } else {
-                    lines.add(currentLine.toString())
-                    val wordWidth = textMeasurer.measureTextWidth(word, style.fontSizePt, style.isBold)
-                    if (wordWidth > maxWidthPt) {
-                        val splitTokens = splitLongToken(word, role, maxWidthPt)
-                        for (token in splitTokens) {
-                            if (token.isNotEmpty()) {
-                                lines.add(token)
-                            }
-                        }
-                        currentLine = StringBuilder()
+                    val candidate = if (currentLine.isEmpty()) {
+                        token.text
                     } else {
-                        currentLine = StringBuilder(word)
+                        currentLine.toString() + token.text
+                    }
+                    val candidateWidth = textMeasurer.measureTextWidth(candidate, style)
+                    if (candidateWidth <= maxWidthPt) {
+                        currentLine.append(token.text)
+                    } else {
+                        lines.add(currentLine.toString())
+                        currentLine = StringBuilder(token.text)
                     }
                 }
             }
@@ -242,24 +275,48 @@ class PdfContentCalculator(
         return lines.ifEmpty { listOf(text) }
     }
 
-    private fun splitLongToken(token: String, role: PdfTextRole, maxWidthPt: Double): List<String> {
+    /**
+     * Unicode-safe splitting of a long unbreakable token.
+     * Uses code-point iteration to avoid splitting UTF-16 surrogate pairs.
+     * All original characters are preserved in order.
+     */
+    private fun splitLongTokenUnicodeSafe(token: String, role: PdfTextRole, maxWidthPt: Double): List<String> {
         if (token.isEmpty()) return emptyList()
         val style = role.style
         val maxChars = textMeasurer.estimateMaxCharsForWidth(token, role, maxWidthPt)
         if (maxChars >= token.length) return listOf(token)
 
+        val codePoints = mutableListOf<Int>()
+        var i = 0
+        while (i < token.length) {
+            val cp = token.codePointAt(i)
+            codePoints.add(cp)
+            i += Character.charCount(cp)
+        }
+
         val result = mutableListOf<String>()
         var start = 0
-        while (start < token.length) {
-            var end = (start + maxChars).coerceAtMost(token.length)
+        while (start < codePoints.size) {
+            var end = (start + maxChars).coerceAtMost(codePoints.size)
             while (end > start + 1) {
-                val chunk = token.substring(start, end)
-                val chunkWidth = textMeasurer.measureTextWidth(chunk, style.fontSizePt, style.isBold)
+                val chunkCodePoints = codePoints.subList(start, end)
+                val chunk = buildString {
+                    for (cp in chunkCodePoints) {
+                        appendCodePoint(cp)
+                    }
+                }
+                val chunkWidth = textMeasurer.measureTextWidth(chunk, style)
                 if (chunkWidth <= maxWidthPt) break
                 end--
             }
-            if (start < token.length) {
-                result.add(token.substring(start, end))
+            if (start < codePoints.size) {
+                val chunkCodePoints = codePoints.subList(start, end)
+                val chunk = buildString {
+                    for (cp in chunkCodePoints) {
+                        appendCodePoint(cp)
+                    }
+                }
+                result.add(chunk)
                 start = end
             }
         }

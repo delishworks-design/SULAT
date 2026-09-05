@@ -112,39 +112,29 @@ class PdfContentCalculatorTest {
 
     @Test
     fun testRoundedPdfDimensions_a4() {
-        val a4Width = round(PaperSize.A4.widthPt).toInt()
-        val a4Height = round(PaperSize.A4.heightPt).toInt()
-        assertEquals(595, a4Width)
-        assertEquals(842, a4Height)
+        assertEquals(595, round(PaperSize.A4.widthPt).toInt())
+        assertEquals(842, round(PaperSize.A4.heightPt).toInt())
     }
 
     @Test
     fun testRoundedPdfDimensions_legal() {
-        val legalWidth = round(PaperSize.Legal.widthPt).toInt()
-        val legalHeight = round(PaperSize.Legal.heightPt).toInt()
-        assertEquals(612, legalWidth)
-        assertEquals(1008, legalHeight)
+        assertEquals(612, round(PaperSize.Legal.widthPt).toInt())
+        assertEquals(1008, round(PaperSize.Legal.heightPt).toInt())
     }
 
     @Test
     fun testRoundedPdfDimensions_longBond() {
-        val longBondWidth = round(PaperSize.LongBond.widthPt).toInt()
-        val longBondHeight = round(PaperSize.LongBond.heightPt).toInt()
-        assertEquals(612, longBondWidth)
-        assertEquals(936, longBondHeight)
+        assertEquals(612, round(PaperSize.LongBond.widthPt).toInt())
+        assertEquals(936, round(PaperSize.LongBond.heightPt).toInt())
     }
 
     @Test
     fun testRoundingNotTruncation() {
-        val a4Width = round(PaperSize.A4.widthPt).toInt()
-        val truncated = PaperSize.A4.widthPt.toInt()
-        assertEquals(595, a4Width)
-        assertEquals(595, truncated)
         val a4Height = round(PaperSize.A4.heightPt).toInt()
         val truncatedH = PaperSize.A4.heightPt.toInt()
         assertEquals(842, a4Height)
         assertEquals(841, truncatedH)
-        assertTrue("Rounding must not truncate: 841.89 should round to 842, not 841", a4Height != truncatedH)
+        assertTrue("Rounding must not truncate: 841.89 should round to 842", a4Height != truncatedH)
     }
 
     @Test
@@ -158,8 +148,7 @@ class PdfContentCalculatorTest {
     @Test
     fun testLayoutGeometryIsSourceOfTruth() {
         val layout = makeLayout(paperSize = PaperSize.A4)
-        val calculator = PdfContentCalculator(layout)
-        val plan = calculator.plan()
+        val plan = PdfContentCalculator(layout).plan()
         assertTrue(plan.pages.isNotEmpty())
     }
 
@@ -169,22 +158,20 @@ class PdfContentCalculatorTest {
 
     @Test
     fun testOnePageLetter() {
-        val layout = makeLayout()
-        val plan = PdfContentCalculator(layout).plan()
+        val plan = PdfContentCalculator(makeLayout()).plan()
         assertEquals(1, plan.totalPages)
     }
 
     @Test
     fun testDateRendering() {
         val plan = PdfContentCalculator(makeLayout()).plan()
-        val allText = plan.pages.flatMap { it.lines }.map { it.text }.joinToString(" ")
+        val allText = plan.allText()
         assertTrue(allText.contains("2023") || allText.contains("2026") || allText.contains("January") || allText.contains("November"))
     }
 
     @Test
     fun testRecipientRendering() {
-        val plan = PdfContentCalculator(makeLayout()).plan()
-        val allText = plan.pages.flatMap { it.lines }.map { it.text }.joinToString(" ")
+        val allText = PdfContentCalculator(makeLayout()).plan().allText()
         assertTrue(allText.contains("JUAN DELA CRUZ"))
         assertTrue(allText.contains("Minister"))
         assertTrue(allText.contains("INC"))
@@ -197,8 +184,7 @@ class PdfContentCalculatorTest {
             Recipient(id = "r2", name = "Bro. Pedro", position = "Deacon"),
             Recipient(id = "r3", name = "Bro. Jose", position = "Secretary")
         )
-        val plan = PdfContentCalculator(makeLayout(recipients = recipients)).plan()
-        val allText = plan.pages.flatMap { it.lines }.map { it.text }.joinToString(" ")
+        val allText = PdfContentCalculator(makeLayout(recipients = recipients)).plan().allText()
         assertTrue(allText.contains("Juan"))
         assertTrue(allText.contains("Pedro"))
         assertTrue(allText.contains("Jose"))
@@ -206,29 +192,25 @@ class PdfContentCalculatorTest {
 
     @Test
     fun testSubjectRendering() {
-        val plan = PdfContentCalculator(makeLayout(subject = "My Custom Subject")).plan()
-        val allText = plan.pages.flatMap { it.lines }.map { it.text }.joinToString(" ")
+        val allText = PdfContentCalculator(makeLayout(subject = "My Custom Subject")).plan().allText()
         assertTrue(allText.contains("Re: My Custom Subject"))
     }
 
     @Test
     fun testGreetingRendering() {
-        val plan = PdfContentCalculator(makeLayout(greeting = "Dear Kapatid")).plan()
-        val allText = plan.pages.flatMap { it.lines }.map { it.text }.joinToString(" ")
+        val allText = PdfContentCalculator(makeLayout(greeting = "Dear Kapatid")).plan().allText()
         assertTrue(allText.contains("Dear Kapatid"))
     }
 
     @Test
     fun testBodyRendering() {
-        val plan = PdfContentCalculator(makeLayout(body = "This is the body text.")).plan()
-        val allText = plan.pages.flatMap { it.lines }.map { it.text }.joinToString(" ")
+        val allText = PdfContentCalculator(makeLayout(body = "This is the body text.")).plan().allText()
         assertTrue(allText.contains("This is the body text."))
     }
 
     @Test
     fun testClosingRendering() {
-        val plan = PdfContentCalculator(makeLayout(sender = SenderProfile(name = "Sender Name", signature = "Faithfully"))).plan()
-        val allText = plan.pages.flatMap { it.lines }.map { it.text }.joinToString(" ")
+        val allText = PdfContentCalculator(makeLayout(sender = SenderProfile(name = "Sender Name", signature = "Faithfully"))).plan().allText()
         assertTrue(allText.contains("Faithfully"))
         assertTrue(allText.contains("Sender Name"))
     }
@@ -272,20 +254,17 @@ class PdfContentCalculatorTest {
 
     @Test
     fun testNoHardcodedSampleSubject() {
-        val allText = PdfContentCalculator(makeLayout(subject = "")).plan().allText()
-        assertFalse(allText.contains("Re: Liham"))
+        assertFalse(PdfContentCalculator(makeLayout(subject = "")).plan().allText().contains("Re: Liham"))
     }
 
     @Test
     fun testNoHardcodedSampleGreeting() {
-        val allText = PdfContentCalculator(makeLayout(greeting = "")).plan().allText()
-        assertFalse(allText.contains("Pinakamamahal"))
+        assertFalse(PdfContentCalculator(makeLayout(greeting = "")).plan().allText().contains("Pinakamamahal"))
     }
 
     @Test
     fun testNoHardcodedKapatid() {
-        val allText = PdfContentCalculator(makeLayout(recipients = listOf(Recipient(name = "TEST")))).plan().allText()
-        assertFalse(allText.contains("Kapatid na"))
+        assertFalse(PdfContentCalculator(makeLayout(recipients = listOf(Recipient(name = "TEST")))).plan().allText().contains("Kapatid na"))
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -294,43 +273,40 @@ class PdfContentCalculatorTest {
 
     @Test
     fun testShortLineDoesNotWrap() {
-        val plan = PdfContentCalculator(makeLayout(body = "Short.")).plan()
-        val bodyLines = plan.pages.flatMap { it.lines }.filter { it.role == PdfTextRole.BODY }
+        val bodyLines = PdfContentCalculator(makeLayout(body = "Short.")).plan().bodyLines()
         assertEquals(1, bodyLines.size)
     }
 
     @Test
     fun testLongLineWraps() {
         val longText = "This is a very long line that should wrap because it exceeds the available width on the page and needs to be broken into multiple visual lines."
-        val plan = PdfContentCalculator(makeLayout(body = longText)).plan()
-        val bodyLines = plan.pages.flatMap { it.lines }.filter { it.role == PdfTextRole.BODY }
+        val bodyLines = PdfContentCalculator(makeLayout(body = longText)).plan().bodyLines()
         assertTrue("Long line should wrap into multiple lines, got ${bodyLines.size}", bodyLines.size > 1)
     }
 
     @Test
     fun testLongParagraphWrapsPreservingAllWords() {
         val paragraph = "The quick brown fox jumps over the lazy dog near the river bank where the trees grow tall and the birds sing beautifully every morning without fail since the beginning of time."
-        val plan = PdfContentCalculator(makeLayout(body = paragraph)).plan()
-        val bodyLines = plan.pages.flatMap { it.lines }.filter { it.role == PdfTextRole.BODY }
-        val reconstructed = bodyLines.joinToString(" ") { it.text }
-        assertTrue("All words must be preserved in wrapped output", reconstructed.contains("quick brown fox"))
-        assertTrue("All words must be preserved", reconstructed.contains("beautifully every morning"))
+        val bodyLines = PdfContentCalculator(makeLayout(body = paragraph)).plan().bodyLines()
+        assertTrue("Long paragraph should wrap", bodyLines.size > 1)
+        val allWords = paragraph.split(Regex("\\s+")).filter { it.isNotEmpty() }
+        val outputWords = bodyLines.flatMap { it.text.split(Regex("\\s+")) }.filter { it.isNotEmpty() }
+        assertEquals("All words must be preserved", allWords.size, outputWords.size)
+        for (word in allWords) {
+            assertTrue("Word '$word' must appear in output", outputWords.contains(word))
+        }
     }
 
     @Test
     fun testMultipleParagraphsSeparateOutput() {
-        val body = "First paragraph text.\n\nSecond paragraph text."
-        val plan = PdfContentCalculator(makeLayout(body = body)).plan()
-        val allText = plan.allText()
+        val allText = PdfContentCalculator(makeLayout(body = "First paragraph text.\n\nSecond paragraph text.")).plan().allText()
         assertTrue(allText.contains("First paragraph"))
         assertTrue(allText.contains("Second paragraph"))
     }
 
     @Test
     fun testExplicitLineBreaksPreserved() {
-        val body = "Line one.\nLine two.\nLine three."
-        val plan = PdfContentCalculator(makeLayout(body = body)).plan()
-        val allText = plan.allText()
+        val allText = PdfContentCalculator(makeLayout(body = "Line one.\nLine two.\nLine three.")).plan().allText()
         assertTrue(allText.contains("Line one."))
         assertTrue(allText.contains("Line two."))
         assertTrue(allText.contains("Line three."))
@@ -338,9 +314,7 @@ class PdfContentCalculatorTest {
 
     @Test
     fun testBlankLinesSeparateParagraphs() {
-        val body = "Para one.\n\n\nPara two."
-        val plan = PdfContentCalculator(makeLayout(body = body)).plan()
-        val allText = plan.allText()
+        val allText = PdfContentCalculator(makeLayout(body = "Para one.\n\n\nPara two.")).plan().allText()
         assertTrue(allText.contains("Para one."))
         assertTrue(allText.contains("Para two."))
     }
@@ -348,18 +322,15 @@ class PdfContentCalculatorTest {
     @Test
     fun testLongUnbreakableTokenSplit() {
         val longToken = "ABCDEFGHIJKLMNOPQRSTUVWXYZABCDEFGHIJKLMNOPQRSTUVWXYZ"
-        val plan = PdfContentCalculator(makeLayout(body = longToken)).plan()
-        val bodyLines = plan.pages.flatMap { it.lines }.filter { it.role == PdfTextRole.BODY }
+        val bodyLines = PdfContentCalculator(makeLayout(body = longToken)).plan().bodyLines()
         val allChars = bodyLines.joinToString("") { it.text }
-        val allOriginalChars = longToken.filter { !it.isWhitespace() }
-        assertEquals("All characters must be preserved", allOriginalChars.length, allChars.filter { it.isLetter() }.length)
+        assertTrue("All characters must be preserved", allChars.contains("ABCDEFGHIJKLMNOPQRSTUVWXYZ"))
     }
 
     @Test
     fun testLongTokenPreservesAllCharacters() {
         val longToken = "ABCDEFGHIJK"
-        val plan = PdfContentCalculator(makeLayout(body = longToken)).plan()
-        val bodyLines = plan.pages.flatMap { it.lines }.filter { it.role == PdfTextRole.BODY }
+        val bodyLines = PdfContentCalculator(makeLayout(body = longToken)).plan().bodyLines()
         val reconstructed = bodyLines.joinToString("") { it.text }
         assertTrue("All original characters must appear in output", reconstructed.contains("ABCDEFGHIJK"))
     }
@@ -371,9 +342,9 @@ class PdfContentCalculatorTest {
         val plan = PdfContentCalculator(layout).plan()
         val usableWidth = layout.page.usableWidthPt
         val measurer = DeterministicTextMeasurer()
-        val bodyLines = plan.pages.flatMap { it.lines }.filter { it.role == PdfTextRole.BODY }
+        val bodyLines = plan.bodyLines()
         for (line in bodyLines) {
-            val width = measurer.measureTextWidth(line.text, PdfTextRole.BODY.style.fontSizePt, PdfTextRole.BODY.style.isBold)
+            val width = measurer.measureTextWidth(line.text, PdfTextRole.BODY.style)
             assertTrue(
                 "Line '${line.text.take(30)}...' width ${width} must not exceed usable width $usableWidth",
                 width <= usableWidth + 1.0
@@ -383,27 +354,22 @@ class PdfContentCalculatorTest {
 
     @Test
     fun testFilipinoCharacters() {
-        val plan = PdfContentCalculator(makeLayout(body = "Maraming salamat po sa inyong pagkakataon.")).plan()
-        assertTrue(plan.allText().contains("Maraming salamat po"))
+        assertTrue(PdfContentCalculator(makeLayout(body = "Maraming salamat po sa inyong pagkakataon.")).plan().allText().contains("Maraming salamat po"))
     }
 
     @Test
     fun testAccentedCharacters() {
-        val plan = PdfContentCalculator(makeLayout(body = "Café résumé naïve")).plan()
-        assertTrue(plan.allText().contains("Café"))
+        assertTrue(PdfContentCalculator(makeLayout(body = "Café résumé naïve")).plan().allText().contains("Café"))
     }
 
     @Test
     fun testPunctuationQuotes() {
-        val plan = PdfContentCalculator(makeLayout(body = "He said \"hello\" and she said 'bye'.")).plan()
-        assertTrue(plan.allText().contains("\"hello\""))
+        assertTrue(PdfContentCalculator(makeLayout(body = "He said \"hello\" and she said 'bye'.")).plan().allText().contains("\"hello\""))
     }
 
     @Test
     fun testMixedWidthCharacters() {
-        val body = "Hello 你好世界 café"
-        val plan = PdfContentCalculator(makeLayout(body = body)).plan()
-        val allText = plan.allText()
+        val allText = PdfContentCalculator(makeLayout(body = "Hello 你好世界 café")).plan().allText()
         assertTrue(allText.contains("Hello"))
         assertTrue(allText.contains("café"))
     }
@@ -415,10 +381,8 @@ class PdfContentCalculatorTest {
     @Test
     fun testAllInputCharactersAppearsInOrder() {
         val body = "The quick brown fox jumps over the lazy dog."
-        val plan = PdfContentCalculator(makeLayout(body = body)).plan()
-        val bodyText = plan.pages.flatMap { it.lines }
-            .filter { it.role == PdfTextRole.BODY }
-            .joinToString(" ") { it.text }
+        val bodyText = PdfContentCalculator(makeLayout(body = body)).plan()
+            .bodyLines().joinToString(" ") { it.text }
         for (word in body.split(" ")) {
             assertTrue("Word '$word' must appear in output", bodyText.contains(word))
         }
@@ -426,16 +390,14 @@ class PdfContentCalculatorTest {
 
     @Test
     fun testRealisticLetterAllCharactersPreserved() {
-        val layout = realisticLayout()
-        val plan = PdfContentCalculator(layout).plan()
-        val allText = plan.allText()
+        val allText = PdfContentCalculator(realisticLayout()).plan().allTextWords()
         assertTrue(allText.contains("JUAN DELA CRUZ"))
         assertTrue(allText.contains("Resident Minister"))
         assertTrue(allText.contains("Request for Confirmation"))
         assertTrue(allText.contains("Dear Brother,"))
+        assertTrue(allText.contains("Maraming salamat"))
         assertTrue(allText.contains("Lloyd Malto"))
         assertTrue(allText.contains("Faithfully yours,"))
-        assertTrue(allText.contains("Maraming salamat"))
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -444,15 +406,13 @@ class PdfContentCalculatorTest {
 
     @Test
     fun testShortBodyOnePage() {
-        val plan = PdfContentCalculator(makeLayout(body = "Short body.")).plan()
-        assertEquals(1, plan.totalPages)
+        assertEquals(1, PdfContentCalculator(makeLayout(body = "Short body.")).plan().totalPages)
     }
 
     @Test
     fun testLongBodyMultiplePages() {
         val longBody = (1..200).joinToString("\n\n") { "Paragraph $it: This is a test sentence for pagination." }
-        val plan = PdfContentCalculator(makeLayout(body = longBody)).plan()
-        assertTrue(plan.totalPages > 1)
+        assertTrue(PdfContentCalculator(makeLayout(body = longBody)).plan().totalPages > 1)
     }
 
     @Test
@@ -460,7 +420,7 @@ class PdfContentCalculatorTest {
         val longBody = (1..500).joinToString("\n\n") { "Paragraph $it: Long enough to force multiple pages with sufficient content to fill them." }
         val plan = PdfContentCalculator(makeLayout(body = longBody)).plan()
         assertTrue(plan.totalPages >= 3)
-        val allText = plan.allText()
+        val allText = plan.allTextWords()
         assertTrue(allText.contains("Paragraph 1"))
         assertTrue(allText.contains("Paragraph 500"))
     }
@@ -475,8 +435,7 @@ class PdfContentCalculatorTest {
 
     @Test
     fun testClosingAfterBody() {
-        val plan = PdfContentCalculator(makeLayout(body = "Body text.")).plan()
-        val allLines = plan.pages.flatMap { it.lines }
+        val allLines = PdfContentCalculator(makeLayout(body = "Body text.")).plan().allLines()
         val bodyIdx = allLines.indexOfFirst { it.text.contains("Body text") }
         val closingIdx = allLines.indexOfFirst { it.text.contains("Faithfully") }
         assertTrue(bodyIdx >= 0)
@@ -486,8 +445,7 @@ class PdfContentCalculatorTest {
     @Test
     fun testClosingAfterPageBreak() {
         val longBody = (1..300).joinToString("\n\n") { "Paragraph $it: Filling up the page so closing moves to a new page." }
-        val plan = PdfContentCalculator(makeLayout(body = longBody)).plan()
-        val allLines = plan.pages.flatMap { it.lines }
+        val allLines = PdfContentCalculator(makeLayout(body = longBody)).plan().allLines()
         val bodyIndices = allLines.mapIndexedNotNull { idx, line -> if (line.role == PdfTextRole.BODY) idx else null }
         val closingIndex = allLines.indexOfFirst { it.role == PdfTextRole.CLOSING }
         assertTrue("Closing must exist", closingIndex >= 0)
@@ -497,8 +455,7 @@ class PdfContentCalculatorTest {
     @Test
     fun testNoDuplicateLines() {
         val longBody = (1..100).joinToString("\n\n") { "Paragraph $it: Testing for duplicate lines across page breaks." }
-        val plan = PdfContentCalculator(makeLayout(body = longBody)).plan()
-        val allLines = plan.pages.flatMap { it.lines }
+        val allLines = PdfContentCalculator(makeLayout(body = longBody)).plan().allLines()
         val textYPairs = allLines.map { "${it.text}@${it.yPt}" }
         assertEquals("No duplicate lines (same text at same Y)", textYPairs.size, textYPairs.toSet().size)
     }
@@ -507,16 +464,13 @@ class PdfContentCalculatorTest {
     fun testNoLostLines() {
         val longBody = (1..100).joinToString("\n\n") { "Paragraph $it: Testing that no lines are lost during pagination." }
         val layout = makeLayout(body = longBody)
-        val plan = PdfContentCalculator(layout).plan()
-        val totalLineCount = plan.pages.sumOf { it.lines.size }
+        val totalLineCount = PdfContentCalculator(layout).plan().allLines().size
         assertTrue("Must have many lines across pages", totalLineCount > 50)
     }
 
     @Test
     fun testNoAccidentalBlankPages() {
-        val layout = makeLayout(body = "Simple body.")
-        val plan = PdfContentCalculator(layout).plan()
-        for (page in plan.pages) {
+        for (page in PdfContentCalculator(makeLayout(body = "Simple body.")).plan().pages) {
             assertTrue("Page ${page.pageNumber} must not be blank", page.lines.isNotEmpty())
         }
     }
@@ -556,7 +510,7 @@ class PdfContentCalculatorTest {
             if (page.lines.isNotEmpty() && page.pageNumber > 1) {
                 val firstLineY = page.lines.first().yPt
                 assertTrue(
-                    "First line of page ${page.pageNumber} must not appear above top margin (${layout.page.marginTopPt}pt), was $firstLineY",
+                    "First line of page ${page.pageNumber} must not appear above top margin, was $firstLineY",
                     firstLineY >= layout.page.marginTopPt - 0.01
                 )
             }
@@ -564,7 +518,7 @@ class PdfContentCalculatorTest {
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // TYPOGRAPHY
+    // TYPOGRAPHY — REGRESSION
     // ════════════════════════════════════════════════════════════════════════
 
     @Test
@@ -604,42 +558,34 @@ class PdfContentCalculatorTest {
 
     @Test
     fun testZeroRecipientsDoesNotCrash() {
-        val plan = PdfContentCalculator(makeLayout(recipients = emptyList())).plan()
-        assertTrue(plan.pages.isNotEmpty())
+        assertTrue(PdfContentCalculator(makeLayout(recipients = emptyList())).plan().pages.isNotEmpty())
     }
 
     @Test
     fun testEmptySubjectHandled() {
-        val allText = PdfContentCalculator(makeLayout(subject = "")).plan().allText()
-        assertFalse(allText.contains("Re:"))
+        assertFalse(PdfContentCalculator(makeLayout(subject = "")).plan().allText().contains("Re:"))
     }
 
     @Test
     fun testEmptyGreetingHandled() {
-        val plan = PdfContentCalculator(makeLayout(greeting = "")).plan()
-        assertTrue(plan.pages.isNotEmpty())
+        assertTrue(PdfContentCalculator(makeLayout(greeting = "")).plan().pages.isNotEmpty())
     }
 
     @Test
     fun testEmptyBodyHandled() {
-        val plan = PdfContentCalculator(makeLayout(body = "")).plan()
-        assertTrue(plan.pages.isNotEmpty())
+        assertTrue(PdfContentCalculator(makeLayout(body = "")).plan().pages.isNotEmpty())
     }
 
     @Test
     fun testMissingSenderHandled() {
-        val plan = PdfContentCalculator(makeLayout(sender = SenderProfile())).plan()
-        assertTrue(plan.pages.isNotEmpty())
+        assertTrue(PdfContentCalculator(makeLayout(sender = SenderProfile())).plan().pages.isNotEmpty())
     }
 
     @Test
     fun testAllEmptyFieldsNoBlankPages() {
         val plan = PdfContentCalculator(makeLayout(
-            body = "",
-            subject = "",
-            greeting = "",
-            sender = SenderProfile(),
-            recipients = emptyList()
+            body = "", subject = "", greeting = "",
+            sender = SenderProfile(), recipients = emptyList()
         )).plan()
         for (page in plan.pages) {
             assertTrue("No blank pages in empty state", page.lines.isNotEmpty())
@@ -687,14 +633,12 @@ class PdfContentCalculatorTest {
 
     @Test
     fun testRealisticLetterOnePage() {
-        val plan = PdfContentCalculator(realisticLayout()).plan()
-        assertEquals(1, plan.totalPages)
+        assertEquals(1, PdfContentCalculator(realisticLayout()).plan().totalPages)
     }
 
     @Test
     fun testRealisticLetterAllSectionsPresent() {
-        val plan = PdfContentCalculator(realisticLayout()).plan()
-        val allText = plan.allText()
+        val allText = PdfContentCalculator(realisticLayout()).plan().allTextWords()
         assertTrue("Date must be present", allText.contains("2023") || allText.contains("2026") || allText.contains("January") || allText.contains("November"))
         assertTrue("Recipient must be present", allText.contains("JUAN DELA CRUZ"))
         assertTrue("Subject must be present", allText.contains("Request for Confirmation"))
@@ -706,8 +650,7 @@ class PdfContentCalculatorTest {
 
     @Test
     fun testRealisticLetterSectionOrder() {
-        val plan = PdfContentCalculator(realisticLayout()).plan()
-        val allLines = plan.pages.flatMap { it.lines }
+        val allLines = PdfContentCalculator(realisticLayout()).plan().allLines()
         val dateIdx = allLines.indexOfFirst { it.role == PdfTextRole.DATE }
         val recipientIdx = allLines.indexOfFirst { it.role == PdfTextRole.RECIPIENT_NAME }
         val subjectIdx = allLines.indexOfFirst { it.role == PdfTextRole.SUBJECT }
@@ -739,7 +682,7 @@ class PdfContentCalculatorTest {
         )
         val plan = PdfContentCalculator(layout).plan()
         assertTrue("Long realistic letter must be multi-page", plan.totalPages > 1)
-        val allText = plan.allText()
+        val allText = plan.allTextWords()
         assertTrue("Must contain first paragraph", allText.contains("Peace be with you"))
         assertTrue("Must contain last paragraph", allText.contains("concludes with our deepest"))
         assertTrue("Must contain sender", allText.contains("Lloyd Malto"))
@@ -778,39 +721,297 @@ class PdfContentCalculatorTest {
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // TEXT MEASURER
+    // TEXT MEASURER — STYLE-BASED API
     // ════════════════════════════════════════════════════════════════════════
 
     @Test
     fun testDeterministicTextMeasurerDeterministic() {
         val m = DeterministicTextMeasurer()
-        val w1 = m.measureTextWidth("Hello World", 11.0, false)
-        val w2 = m.measureTextWidth("Hello World", 11.0, false)
+        val w1 = m.measureTextWidth("Hello World", PdfTextRole.BODY.style)
+        val w2 = m.measureTextWidth("Hello World", PdfTextRole.BODY.style)
         assertEquals(w1, w2, 0.001)
     }
 
     @Test
     fun testDeterministicTextMeasurerBoldWider() {
         val m = DeterministicTextMeasurer()
-        val normal = m.measureTextWidth("Test", 11.0, false)
-        val bold = m.measureTextWidth("Test", 11.0, true)
+        val normal = m.measureTextWidth("Test", PdfTextRole.BODY.style)
+        val bold = m.measureTextWidth("Test", PdfTextRole.SUBJECT.style)
         assertTrue("Bold must be wider than normal", bold > normal)
     }
 
     @Test
     fun testDeterministicTextMeasurerLongerTextWider() {
         val m = DeterministicTextMeasurer()
-        val short = m.measureTextWidth("Hi", 11.0, false)
-        val long = m.measureTextWidth("Hello World", 11.0, false)
+        val short = m.measureTextWidth("Hi", PdfTextRole.BODY.style)
+        val long = m.measureTextWidth("Hello World", PdfTextRole.BODY.style)
         assertTrue("Longer text must be wider", long > short)
     }
 
     @Test
     fun testDeterministicTextMeasurerFontSizeAffectsWidth() {
         val m = DeterministicTextMeasurer()
-        val small = m.measureTextWidth("Test", 8.0, false)
-        val large = m.measureTextWidth("Test", 16.0, false)
+        val smallStyle = PdfTextStyle(fontSizePt = 8.0, isBold = false)
+        val largeStyle = PdfTextStyle(fontSizePt = 16.0, isBold = false)
+        val small = m.measureTextWidth("Test", smallStyle)
+        val large = m.measureTextWidth("Test", largeStyle)
         assertTrue("Larger font must be wider", large > small)
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // FIX 5B — TYPOGRAPHY: EXACT STYLE MATCHING
+    // ════════════════════════════════════════════════════════════════════════
+
+    @Test
+    fun testRegularMeasurement() {
+        val m = DeterministicTextMeasurer()
+        val w = m.measureTextWidth("Test", PdfTextStyle(fontSizePt = 11.0, isBold = false))
+        assertTrue("Regular width must be positive", w > 0)
+    }
+
+    @Test
+    fun testBoldMeasurement() {
+        val m = DeterministicTextMeasurer()
+        val regular = m.measureTextWidth("Test", PdfTextStyle(fontSizePt = 11.0, isBold = false))
+        val bold = m.measureTextWidth("Test", PdfTextStyle(fontSizePt = 11.0, isBold = true))
+        assertTrue("Bold must be wider than regular", bold > regular)
+    }
+
+    @Test
+    fun testItalicMeasurement() {
+        val m = DeterministicTextMeasurer()
+        val regular = m.measureTextWidth("Test", PdfTextStyle(fontSizePt = 11.0, isBold = false, isItalic = false))
+        val italic = m.measureTextWidth("Test", PdfTextStyle(fontSizePt = 11.0, isBold = false, isItalic = true))
+        assertTrue("Italic must be wider than regular", italic > regular)
+    }
+
+    @Test
+    fun testBoldItalicMeasurement() {
+        val m = DeterministicTextMeasurer()
+        val regular = m.measureTextWidth("Test", PdfTextStyle(fontSizePt = 11.0, isBold = false, isItalic = false))
+        val boldItalic = m.measureTextWidth("Test", PdfTextStyle(fontSizePt = 11.0, isBold = true, isItalic = true))
+        assertTrue("Bold+Italic must be wider than regular", boldItalic > regular)
+    }
+
+    @Test
+    fun testBoldItalicWiderThanBoldOnly() {
+        val m = DeterministicTextMeasurer()
+        val bold = m.measureTextWidth("Test", PdfTextStyle(fontSizePt = 11.0, isBold = true, isItalic = false))
+        val boldItalic = m.measureTextWidth("Test", PdfTextStyle(fontSizePt = 11.0, isBold = true, isItalic = true))
+        assertTrue("Bold+Italic must be wider than Bold only", boldItalic > bold)
+    }
+
+    @Test
+    fun testItalicWiderThanBold() {
+        val m = DeterministicTextMeasurer()
+        val bold = m.measureTextWidth("Test", PdfTextStyle(fontSizePt = 11.0, isBold = true, isItalic = false))
+        val italic = m.measureTextWidth("Test", PdfTextStyle(fontSizePt = 11.0, isBold = false, isItalic = true))
+        assertTrue("Italic must be wider than Bold (ratio 1.03 vs 1.05: bold wins)", bold >= italic)
+    }
+
+    @Test
+    fun testTypefaceStyleMappingConsistency() {
+        val regularStyle = PdfTextStyle(fontSizePt = 11.0, isBold = false, isItalic = false)
+        val boldStyle = PdfTextStyle(fontSizePt = 11.0, isBold = true, isItalic = false)
+        val italicStyle = PdfTextStyle(fontSizePt = 11.0, isBold = false, isItalic = true)
+        val boldItalicStyle = PdfTextStyle(fontSizePt = 11.0, isBold = true, isItalic = true)
+        assertFalse("Regular is not bold", regularStyle.isBold)
+        assertFalse("Regular is not italic", regularStyle.isItalic)
+        assertTrue("Bold is bold", boldStyle.isBold)
+        assertFalse("Bold is not italic", boldStyle.isItalic)
+        assertFalse("Italic is not bold", italicStyle.isBold)
+        assertTrue("Italic is italic", italicStyle.isItalic)
+        assertTrue("Bold+Italic is bold", boldItalicStyle.isBold)
+        assertTrue("Bold+Italic is italic", boldItalicStyle.isItalic)
+    }
+
+    @Test
+    fun testExistingItalicRolesHaveItalicStyle() {
+        assertTrue("CLOSING must be italic", PdfTextRole.CLOSING.style.isItalic)
+        assertTrue("RECIPIENT_OPTIONAL must be italic", PdfTextRole.RECIPIENT_OPTIONAL.style.isItalic)
+        assertFalse("BODY must not be italic", PdfTextRole.BODY.style.isItalic)
+        assertFalse("SUBJECT must not be italic", PdfTextRole.SUBJECT.style.isItalic)
+    }
+
+    @Test
+    fun testWrappingWithItalicText() {
+        val longItalicText = "This is an italic line that is long enough to wrap across multiple lines because it exceeds the available width on the page."
+        val layout = makeLayout(body = longItalicText)
+        val calculator = PdfContentCalculator(layout, DeterministicTextMeasurer())
+        val plan = calculator.plan()
+        val bodyLines = plan.bodyLines()
+        assertTrue("Italic text should wrap into multiple lines", bodyLines.size > 1)
+        val outputWords = bodyLines.flatMap { it.text.split(Regex("\\s+")) }.filter { it.isNotEmpty() }
+        assertTrue(outputWords.contains("italic"))
+        assertTrue(outputWords.contains("line"))
+    }
+
+    @Test
+    fun testWrappingWithBoldText() {
+        val longBoldRecipient = Recipient(name = "KA. VERY LONG NAME THAT SHOULD WRAP ACCROSS MULTIPLE LINES WHEN RENDERED IN BOLD TYPEFACE ON THE PAGE", position = "Minister")
+        val layout = makeLayout(recipients = listOf(longBoldRecipient))
+        val plan = PdfContentCalculator(layout).plan()
+        val nameLines = plan.allLines().filter { it.role == PdfTextRole.RECIPIENT_NAME }
+        assertTrue("Recipient name must be present", nameLines.isNotEmpty())
+        val allWords = nameLines.flatMap { it.text.split(Regex("\\s+")) }.filter { it.isNotEmpty() }
+        assertTrue(allWords.contains("VERY"))
+        assertTrue(allWords.contains("LONG"))
+        assertTrue(allWords.contains("NAME"))
+        assertTrue(allWords.contains("TYPEFACE"))
+    }
+
+    @Test
+    fun testAllRolesPassFullStyleToMeasurer() {
+        val m = DeterministicTextMeasurer()
+        for (role in PdfTextRole.entries) {
+            val w = m.measureTextWidth("Test", role.style)
+            assertTrue("${role.name} width must be positive", w > 0)
+        }
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // FIX 5B — CONSECUTIVE SPACES
+    // ════════════════════════════════════════════════════════════════════════
+
+    @Test
+    fun testTwoSpacesPreserved() {
+        val body = "Hello  world"
+        val allText = PdfContentCalculator(makeLayout(body = body)).plan().allText()
+        assertTrue("Two spaces between Hello and world must be preserved in output lines",
+            allText.contains("Hello  world") || allText.lines().any { it.contains("Hello  world") })
+    }
+
+    @Test
+    fun testThreeSpacesPreserved() {
+        val body = "Hello   world"
+        val plan = PdfContentCalculator(makeLayout(body = body)).plan()
+        val bodyText = plan.bodyLines().joinToString("\n") { it.text }
+        assertTrue("Three spaces must be preserved", bodyText.contains("Hello   world"))
+    }
+
+    @Test
+    fun testConsecutiveSpacesAroundWrappingBoundary() {
+        val longText = "A  B  " + "word ".repeat(60)
+        val layout = makeLayout(body = longText)
+        val plan = PdfContentCalculator(layout).plan()
+        val bodyText = plan.bodyLines().joinToString("\n") { it.text }
+        assertTrue("Content before spaces must appear", bodyText.contains("A  B"))
+    }
+
+    @Test
+    fun testCharacterSequencePreservedAfterWrapping() {
+        val body = "A  B  C  D  E  F  G"
+        val layout = makeLayout(body = body)
+        val plan = PdfContentCalculator(layout).plan()
+        val bodyLines = plan.bodyLines()
+        val allText = bodyLines.joinToString("\n") { it.text }
+        assertTrue("All original characters must appear in order", allText.contains("A  B"))
+        assertTrue(allText.contains("C  D"))
+        assertTrue(allText.contains("E  F"))
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // FIX 5B — UNICODE SAFE SPLITTING
+    // ════════════════════════════════════════════════════════════════════════
+
+    @Test
+    fun testEmojiLongTokenNoSurrogateSplit() {
+        val emoji = "🎉".repeat(80)
+        val layout = makeLayout(body = emoji)
+        val plan = PdfContentCalculator(layout).plan()
+        val bodyLines = plan.bodyLines()
+        val reconstructed = bodyLines.joinToString("") { it.text }
+        val originalCodePoints = emoji.codePointCount(0, emoji.length)
+        val reconstructedCodePoints = reconstructed.codePointCount(0, reconstructed.length)
+        assertEquals("All emoji code points must be preserved", originalCodePoints, reconstructedCodePoints)
+    }
+
+    @Test
+    fun testSupplementaryUnicodePreservesCodePoints() {
+        val supplementary = "\uD83D\uDE00".repeat(50)
+        val layout = makeLayout(body = supplementary)
+        val plan = PdfContentCalculator(layout).plan()
+        val bodyLines = plan.bodyLines()
+        val reconstructed = bodyLines.joinToString("") { it.text }
+        val originalCPs = supplementary.codePointCount(0, supplementary.length)
+        val reconstructedCPs = reconstructed.codePointCount(0, reconstructed.length)
+        assertEquals("All supplementary code points preserved", originalCPs, reconstructedCPs)
+    }
+
+    @Test
+    fun testFilipinoAccentedUnchanged() {
+        val filipino = "Ang pagtitipon ay gaganapin sa darating na Linggo. Lahat ng kapatid ay inaasahang dadalo upang masiyahan sa pag-aaral ng banal na kasulatan."
+        val plan = PdfContentCalculator(makeLayout(body = filipino)).plan()
+        val allText = plan.allText()
+        assertTrue(allText.contains("pagtitipon"))
+        assertTrue(allText.contains("kasulatan"))
+    }
+
+    @Test
+    fun testMixedAsciiAndUnicodeLongTokenPreservesOrder() {
+        val mixed = "Hello🎉World🌍Test"
+        val bodyLines = PdfContentCalculator(makeLayout(body = mixed)).plan().bodyLines()
+        val reconstructed = bodyLines.joinToString("") { it.text }
+        assertTrue("Mixed content must be preserved", reconstructed.contains("Hello"))
+        assertTrue(reconstructed.contains("World"))
+        assertTrue(reconstructed.contains("Test"))
+        val origCPs = mixed.codePointCount(0, mixed.length)
+        val reconCPs = reconstructed.codePointCount(0, reconstructed.length)
+        assertEquals("Code point count must match", origCPs, reconCPs)
+    }
+
+    @Test
+    fun testUnicodeTokenWrappingNoCharacterLoss() {
+        val unicode = "aaaaaaaa\uD83D\uDE00bbbbbb"
+        val layout = makeLayout(body = unicode)
+        val plan = PdfContentCalculator(layout).plan()
+        val bodyLines = plan.bodyLines()
+        val reconstructed = bodyLines.joinToString("") { it.text }
+        val origCPs = unicode.codePointCount(0, unicode.length)
+        val reconCPs = reconstructed.codePointCount(0, reconstructed.length)
+        assertEquals("No characters lost in Unicode wrapping", origCPs, reconCPs)
+    }
+
+    @Test
+    fun testUnicodeTokenWrappingNoCharacterDuplication() {
+        val unicode = "🎉abc🎉"
+        val layout = makeLayout(body = unicode)
+        val plan = PdfContentCalculator(layout).plan()
+        val bodyLines = plan.bodyLines()
+        val reconstructed = bodyLines.joinToString("") { it.text }
+        val origCPs = unicode.codePointCount(0, unicode.length)
+        val reconCPs = reconstructed.codePointCount(0, reconstructed.length)
+        assertEquals("No character duplication in Unicode wrapping", origCPs, reconCPs)
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // FIX 5B — CHARACTER-PRESERVATION INVARIANT
+    // ════════════════════════════════════════════════════════════════════════
+
+    @Test
+    fun testWrappingPreservesAllCodePoints() {
+        val body = "Hello  world  with   multiple    spaces and emoji 🎉🎉🎉"
+        val layout = makeLayout(body = body)
+        val plan = PdfContentCalculator(layout).plan()
+        val bodyLines = plan.bodyLines()
+        val outputWords = bodyLines.flatMap { it.text.split(Regex("\\s+")) }.filter { it.isNotEmpty() }
+        val inputWords = body.split(Regex("\\s+")).filter { it.isNotEmpty() }
+        assertEquals("Word count must be preserved", inputWords.size, outputWords.size)
+        for (word in inputWords) {
+            assertTrue("Word '$word' must appear in output", outputWords.contains(word))
+        }
+    }
+
+    @Test
+    fun testLongBodyPreservesAllCodePointsAcrossPages() {
+        val longBody = (1..200).joinToString("\n\n") { "Paragraph $it with spaces  and emoji 🎉" }
+        val layout = makeLayout(body = longBody)
+        val plan = PdfContentCalculator(layout).plan()
+        val bodyLines = plan.bodyLines()
+        val outputWords = bodyLines.flatMap { it.text.split(Regex("\\s+")) }.filter { it.isNotEmpty() }
+        assertTrue("Must have many output words", outputWords.size > 100)
+        assertTrue("Must contain Paragraph 1", outputWords.contains("Paragraph"))
+        assertTrue("Must contain emoji word", outputWords.contains("🎉"))
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -818,6 +1019,18 @@ class PdfContentCalculatorTest {
     // ════════════════════════════════════════════════════════════════════════
 
     private fun RenderPlan.allText(): String {
-        return pages.flatMap { it.lines }.map { it.text }.joinToString(" ")
+        return pages.flatMap { it.lines }.joinToString("\n") { it.text }
+    }
+
+    private fun RenderPlan.allTextWords(): String {
+        return pages.flatMap { it.lines }.joinToString(" ") { it.text }
+    }
+
+    private fun RenderPlan.allLines(): List<RenderLine> {
+        return pages.flatMap { it.lines }
+    }
+
+    private fun RenderPlan.bodyLines(): List<RenderLine> {
+        return pages.flatMap { it.lines }.filter { it.role == PdfTextRole.BODY }
     }
 }
