@@ -152,6 +152,7 @@ object PdfArtifactManager {
     private fun sanitizeForFilename(input: String): String {
         return input
             .replace(Regex("[/\\\\:*?\"<>|]"), "")
+            .replace(".", "")
             .replace(Regex("[\\x00-\\x1f]"), "")
             .replace(Regex("\\s+"), "_")
             .trim()

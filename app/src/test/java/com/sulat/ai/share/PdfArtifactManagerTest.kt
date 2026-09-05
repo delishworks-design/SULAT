@@ -339,10 +339,19 @@ class PdfArtifactManagerTest {
 
     @Test
     fun productionCodeMustNotInstantiateApplication() {
-        val sourceFile = File("app/src/main/kotlin/com/sulat/ai/share/PdfArtifactManager.kt")
-        assertTrue("PdfArtifactManager.kt must exist", sourceFile.exists())
+        var dir: File? = File(System.getProperty("user.dir"))
+        var sourceFile: File? = null
+        while (dir != null) {
+            val candidate = File(dir, "app/src/main/kotlin/com/sulat/ai/share/PdfArtifactManager.kt")
+            if (candidate.exists()) {
+                sourceFile = candidate
+                break
+            }
+            dir = dir.parentFile
+        }
+        assertNotNull("PdfArtifactManager.kt must exist under project root", sourceFile)
 
-        val sourceContent = sourceFile.readText()
+        val sourceContent = sourceFile!!.readText()
         assertFalse(
             "Production code must NOT contain 'android.app.Application()' - use real Context instead",
             sourceContent.contains("android.app.Application()")
