@@ -212,7 +212,9 @@ class EnvelopePreviewActivity : Activity() {
 
         val firstRecipientName = envelopeDataList.first().recipient.name
         val filename = EnvelopeFilename.generate(firstRecipientName)
-        val outputFile = File(cacheDir, filename)
+        val shareDir = ShareHelper.getShareDirectory(this)
+        shareDir.mkdirs()
+        val outputFile = File(shareDir, filename)
 
         val renderer = EnvelopeRenderer(DeterministicTextMeasurer())
         val result = renderer.renderEnvelopePdf(envelopeDataList, outputFile, paperSize)
@@ -224,6 +226,12 @@ class EnvelopePreviewActivity : Activity() {
 
         if (result.file == null || !com.sulat.ai.document.renderer.PdfRenderer.isValidPdfFile(result.file)) {
             Toast.makeText(this, "Generated envelope PDF is invalid", Toast.LENGTH_LONG).show()
+            return
+        }
+
+        val dirCheck = ShareHelper.validateShareDirectory(result.file, shareDir)
+        if (dirCheck != null) {
+            Toast.makeText(this, "Envelope PDF is not in the permitted share directory", Toast.LENGTH_LONG).show()
             return
         }
 
