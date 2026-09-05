@@ -84,7 +84,8 @@ object PrintHelper {
         val jobName = "$PRINT_JOB_PREFIX-${draft.id.take(8)}"
 
         val adapter = PdfPrintDocumentAdapter(pdfFile, jobName)
-        printManager.print(jobName, adapter, null)
+        val attributes = buildPrintAttributes(paperSize)
+        printManager.print(jobName, adapter, attributes)
 
         return printResult
     }
@@ -95,11 +96,21 @@ object PrintHelper {
      */
     fun buildPrintAttributes(paperSize: PaperSize): PrintAttributes {
         val mediaSize = when (paperSize) {
-            PaperSize.A4 -> PrintAttributes.MediaSize.ISO_A4
-            PaperSize.Legal -> PrintAttributes.MediaSize.NA_LEGAL
+            PaperSize.A4 -> PrintAttributes.MediaSize(
+                "ISO_A4", "A4",
+                8268, 11693  // 210mm × 297mm in mils (1/1000 inch)
+            )
+            PaperSize.ShortBond -> PrintAttributes.MediaSize(
+                "NA_LETTER", "Letter",
+                8500, 11000  // 8.5in × 11in in mils
+            )
+            PaperSize.Legal -> PrintAttributes.MediaSize(
+                "NA_LEGAL", "Legal",
+                8500, 14000  // 8.5in × 14in in mils
+            )
             PaperSize.LongBond -> PrintAttributes.MediaSize(
                 "LONG_BOND", "Long Bond",
-                (paperSize.widthMm * 10).toInt(), (paperSize.heightMm * 10).toInt()
+                8500, 13000  // 8.5in × 13in in mils
             )
         }
 

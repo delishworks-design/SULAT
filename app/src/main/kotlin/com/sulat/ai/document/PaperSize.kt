@@ -12,6 +12,12 @@ enum class PaperSize(
         widthMm = 210.0,
         heightMm = 297.0
     ),
+    ShortBond(
+        widthPt = 612.0,     // 8.5in = 215.9mm
+        heightPt = 792.0,    // 11in = 279.4mm
+        widthMm = 215.9,
+        heightMm = 279.4
+    ),
     Legal(
         widthPt = 612.0,     // 8.5in = 215.9mm
         heightPt = 1008.0,   // 14in = 355.6mm
