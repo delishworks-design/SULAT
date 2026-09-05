@@ -13,12 +13,11 @@ import android.print.PrintManager
 import com.sulat.ai.data.model.LetterDraft
 import com.sulat.ai.data.model.Recipient
 import com.sulat.ai.data.model.SenderProfile
+import com.sulat.ai.document.PaperSize
 import java.io.File
 import java.io.FileOutputStream
 
 object PrintHelper {
-
-    enum class PaperSize { A4, Legal, LongBond, Letter }
 
     fun printDocument(
         context: Context,
