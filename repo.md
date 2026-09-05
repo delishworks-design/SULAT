@@ -602,3 +602,378 @@ The FIX13 / FIX14 HIGH-severity staleness defect is closed:
 - No new dependencies. No network / cloud / AI. No second PDF pipeline.
 
 ---
+
+## FIX15 — End-to-end Save/Edit/Preview/Share/Print audit
+
+### Status
+
+**Audit complete. No new defects found.** Production code intentionally
+unchanged. CI was GREEN before this audit (commit `455f347`); this audit adds
+ONLY this report.
+
+### Audit commit
+
+This report is the audit commit. No production source, test, Gradle, manifest,
+or workflow file was modified.
+
+### Workflow trace
+
+The full user workflow was traced end-to-end by reading every relevant source
+file in `app/src/main` and cross-referencing every call site of
+`PdfArtifactManager`, `PersistenceManager`, `LetterTemplateEngine`,
+`PdfRenderer`, `ShareHelper`, `SaveHelper`, `PrintHelper`, `PdfPrintDocumentAdapter`,
+and the workflow activities.
+
+**Canonical funnel (verified):**
+
+```
+LetterDraft
+   ↓
+PersistenceManager.saveDraft → JSON write → invalidateCachedArtifacts (C7)
+   ↓ (next ensurePdfArtifact)
+PdfArtifactManager.ensurePdfArtifact
+   ↓ buildLayout (LetterTemplateEngine) + renderPdf (PdfRenderer)
+cacheDir/shared/Sulat-<safeDraftId>-<safeSubject>-<paperSize>.pdf (+ .fp sidecar)
+   ↓
+PreviewActivity.currentArtifact  ←── Save / Share / Print (single canonical reference)
+   ↓
+SaveHelper.saveToUri    |    ShareHelper.sharePdf (FileProvider)    |    PrintHelper.printExistingPdf (PdfPrintDocumentAdapter)
+```
+
+### Save findings
+
+- **`PersistenceManager.saveDraft` writes the latest LetterDraft to JSON atomically**
+  via temp-file → rename pattern (`PersistenceManager.kt:125-174`).
+- **Invalidates the correct cached artifact**: after `writeDrafts` succeeds, calls
+  `invalidateCachedArtifacts(context, draft)` which iterates `PaperSize.entries`
+  (4 sizes) and deletes each canonical artifact + sidecar via
+  `PdfArtifactManager.deleteArtifact` (`PersistenceManager.kt:113-121`).
+- **Preserves draft ID**: `loadDrafts` → `indexOfFirst { it.id == draft.id }` →
+  in-place replacement at index, or append if new. No id regeneration.
+- **Preserves all fields**: full JSON round-trip verified by
+  `PersistenceManagerTest.testDraftToJsonAndBack` and
+  `PersistenceManagerCrudTest` (instrumentation).
+
+**Verdict**: PASS.
+
+### Edit findings
+
+All four editor activities (`WriteLetterActivity`, `LetterInfoActivity`,
+`CreateLetterActivity`, `DateSelectionActivity`) and `MainActivity` route
+through `PersistenceManager.saveDraft`. Each edit uses `draft.copy(...)` which:
+
+- Preserves `id` (verified by `SaveEditDeleteTest.sameDraftIdThroughWorkflow`).
+- Updates `modifiedTime`.
+- Routes through `PersistenceManager.saveDraft`, which now invalidates all 4
+  cached artifacts (FIX14-B).
+
+`onPause` on every editor also calls `saveDraft`, so a process-death-after-edit
+leaves the artifact invalidated for the next `ensurePdfArtifact` call.
+
+**Verdict**: PASS.
+
+### Preview findings
+
+`PreviewActivity.onCreate` (lines 41-98):
+- Reads `EXTRA_DRAFT_ID` from intent (preserved across process death).
+- Loads draft via `PersistenceManager.getDraft(this, draftId)` — latest persisted
+  state including any prior edits.
+- Reads `EXTRA_PAPER_SIZE` from intent (defaults to A4 if absent/invalid).
+- Builds `DocumentLayout` via `LetterTemplateEngine().buildLayout(draft, paperSize)`.
+- Computes `RenderPlan` via `PdfContentCalculator(layout).plan()`.
+- Renders pages via `PreviewCalculator(renderPlan, layout.page, availableWidthPx)`.
+
+Preview is recomputed on every entry; it NEVER reads a cached PDF. The preview
+uses the SAME `LetterTemplateEngine → DocumentLayout → PdfContentCalculator`
+pipeline that `PdfRenderer.renderPdf` uses (verified by reading both source
+files). Preview and PDF are therefore always consistent.
+
+**Verdict**: PASS.
+
+### Share findings
+
+`PreviewActivity.sharePdf` (lines 173-186):
+- `val artifact = ensurePdfArtifact() ?: return` — calls
+  `PdfArtifactManager.ensurePdfArtifact(this, currentDraft, currentPaperSize)`.
+- `validateArtifact(artifact, this)` — checks `%PDF-` header +
+  `cacheDir/shared/` containment.
+- `ShareHelper.sharePdf(this, artifact)` — opens sharesheet via
+  `FileProvider.getUriForFile(...)`.
+
+Verified Share can NEVER use an old File reference:
+- `currentArtifact` field is updated inside `ensurePdfArtifact` (line 125) on
+  every call. Share does NOT read `currentArtifact`; it calls `ensurePdfArtifact`
+  fresh (line 174).
+- Even if `currentArtifact` were stale, Share would still get a fresh call.
+
+Verified Share cannot bypass the canonical funnel:
+- The only call site of `FileProvider.getUriForFile` is in `ShareHelper.sharePdf`.
+- The only call site of `ShareHelper.sharePdf` is in `PreviewActivity.sharePdf`.
+- No alternate generation in the call path.
+
+**Verdict**: PASS.
+
+### Print findings
+
+`PreviewActivity.printPdf` (lines 188-205):
+- `val artifact = ensurePdfArtifact() ?: return` — same canonical funnel.
+- `validateArtifact(artifact, this)`.
+- `PrintHelper.printExistingPdf(this, artifact, currentPaperSize, jobName)`.
+
+`PrintHelper.printExistingPdf` (lines 174-191):
+- `validateExistingPdf(pdfFile)` — structural checks.
+- `printManager.print(jobName, PdfPrintDocumentAdapter(pdfFile, jobName), attributes)`.
+
+`PdfPrintDocumentAdapter` (lines 228-312):
+- `onLayout`: counts pages via `readPdfPageCount(pdfFile)` (precomputed in `init`).
+- `onWrite`: streams bytes from `pdfFile` to the destination fd without
+  modification.
+
+Verified Print can NEVER use a stale or separately generated PDF:
+- `PdfPrintDocumentAdapter` is the only `PrintDocumentAdapter` in the codebase.
+- It is constructed only inside `printExistingPdf`, which receives the
+  canonical artifact.
+- No alternate generation in the call path.
+- `onWrite` copies bytes verbatim; no re-rendering or substitution.
+
+**Verdict**: PASS.
+
+### Reopen / process-death findings
+
+**Scenario (a)**: SavedLettersActivity → tap "Open" → CreateLetterActivity →
+Continue → WriteLetterActivity → PreviewActivity.
+- `SavedLettersActivity.openForEditing` (line 140-150) passes `EXTRA_DRAFT_ID`.
+  No PDF is opened, no PDF is touched. ✓
+- Each editor's Continue handler invalidates cached artifacts via
+  `PersistenceManager.saveDraft`. ✓
+- `PreviewActivity.onCreate` loads latest draft from PersistenceManager,
+  generates fresh PDF (or reuses matching-sidecar one). ✓
+
+**Scenario (b)**: Process death after PreviewActivity is open.
+- Intent extras (`EXTRA_DRAFT_ID`, `EXTRA_PAPER_SIZE`) are preserved by the
+  Android Activity lifecycle.
+- `PreviewActivity.onCreate` re-runs and loads the latest persisted draft.
+- The cache also survives process death; however, all editors' `onPause`
+  handlers call `saveDraft` (verified in `WriteLetterActivity.kt:105-116`,
+  `LetterInfoActivity.kt:97-111`, `CreateLetterActivity.kt:174-185`,
+  `DateSelectionActivity`). So the artifact was invalidated at `onPause` if
+  any edit happened.
+- Even if invalidation somehow didn't run, the sidecar (FIX14-B) catches it:
+  the recomputed fingerprint for the latest draft will not match the sidecar,
+  forcing regeneration.
+
+**Scenario (c)**: Process death mid-edit, before `onPause` runs.
+- The on-disk draft is OLD (the save didn't run). On reopen, the loaded draft
+  matches the OLD cached artifact (same fingerprint). User sees consistent OLD
+  content. No staleness.
+- If the user then edits and saves, invalidation runs and the artifact is
+  regenerated. ✓
+
+**Verdict**: PASS.
+
+### Paper-size findings
+
+The four `PaperSize.entries` cases (A4, ShortBond, Legal, LongBond) are all
+covered by `PdfArtifactFingerprintTest.allFourPaperSizesProduceDistinctFingerprints`
+and `PdfArtifactManagerTest.sameDraftDifferentPaperSizeDifferentPath`. Different
+paper sizes produce different canonical filenames (because
+`paperSize.name` is part of the filename formula at `PdfArtifactManager.kt:30-31`).
+
+`PreviewActivity` reads `EXTRA_PAPER_SIZE` from intent (defaults to A4 if
+absent/invalid). Verified by grep: no caller in `src/main` actually sets
+`EXTRA_PAPER_SIZE`. **This is not an artifact-identity defect** — the artifact
+identity contract still holds for all four sizes. It IS a UX gap: the app
+effectively only uses A4 in the current UI flow. Flagged as a separate
+concern, not part of this artifact audit.
+
+Changing paper size at the `ensurePdfArtifact` call (which never happens in
+the current UI) would correctly invalidate the prior paper size's artifact
+(via `invalidateCachedArtifacts` iterating all entries) and generate the new
+size's artifact at a distinct canonical path.
+
+**Verdict**: PASS (artifact contract); LOW (UX — paper-size UI not wired).
+
+### Multi-recipient findings
+
+`CreateLetterActivity.validateAndSave` (line 131-148) replaces the entire
+recipients list via `draft.copy(recipients = recipients, ...)`. Recipients
+are stored as `List<Recipient>` with stable per-recipient `id`. Edits to:
+
+- recipient name → different fingerprint (`PdfArtifactFingerprintTest.recipientNameChangeDifferentFingerprint`)
+- position → different fingerprint (`recipientFieldChangeDifferentFingerprint`)
+- organization, address, optionalInfo → different fingerprint (covered by
+  same test pattern, all 5 fields in fingerprint formula)
+- ordering → different fingerprint (`recipientOrderChangeDifferentFingerprint`)
+- count (add/delete recipient) → different fingerprint (different `recipients.count`)
+
+Each invalidates the cached artifact via the `PersistenceManager.saveDraft`
+chokepoint, then regenerates on the next `ensurePdfArtifact` call.
+
+**Verdict**: PASS.
+
+### Stale-reference findings
+
+Searched for stale File references in `app/src/main`:
+
+| Reference | Location | Status |
+|---|---|---|
+| `PreviewActivity.currentArtifact` | line 39, 125, 154 | Set by `ensurePdfArtifact`; read by `saveToUri` after SAF round-trip. Always consistent with the latest `ensurePdfArtifact` return value (no concurrent edits during SAF picker). |
+| `EnvelopePreviewActivity.currentEnvelopePdf` | line 39 | Envelope pipeline; re-rendered on every entry (FIX13 evidence). Out of scope for letter-PDF audit. |
+| `PrintResult.pdfFile`, `ShareResult.pdfFile`, `SaveResult.pdfFile` | helper result types | Data class fields; no aliasing. Used only by callers that already hold the canonical artifact. |
+| `PdfPrintDocumentAdapter.pdfFile` | line 229 | Constructor parameter; immutable for the adapter lifetime. Source-of-truth is the canonical artifact. |
+| `FileProvider.getUriForFile` | `ShareHelper.kt:113` | Only call site. Uses resolved authority. No `Uri.fromFile` anywhere. |
+
+**Verdict**: PASS — no stale references can cause the user to receive an outdated PDF.
+
+### Legacy-path findings
+
+Verified all four legacy helpers are unreachable in `app/src/main` AND
+`app/src/test`:
+
+- `ShareHelper.generateAndShare` (lines 62-99) — writes to non-canonical path
+  `cacheDir/shared/<sanitizedName>.pdf`. **Zero callers.** Cleanup debt.
+- `SaveHelper.generatePdf` (lines 28-61) — writes to `cacheDir/save_<id>.pdf`.
+  Outside `cacheDir/shared/`, outside FileProvider scope. **Zero callers.**
+- `PrintHelper.generatePrintPdf` (lines 35-66) — writes to
+  `cacheDir/print_<id>.pdf`. Outside FileProvider scope. **Zero callers.**
+- `PrintHelper.printDocument` (lines 72-91) — wraps the above. **Zero callers.**
+- `PdfRenderer.renderLetterToPdf` (lines 130-138) — top-level convenience that
+  bypasses canonical artifact. **Zero callers.**
+
+These were already documented as cleanup debt in FIX13/FIX14-B. They are
+**not a current defect**, but they remain as future-bypass hazards. If a future
+caller accidentally invokes one, it would bypass the fingerprint sidecar and
+potentially leave a stale artifact.
+
+**Verdict**: LOW severity cleanup debt; no current defect.
+
+### Test coverage
+
+**JVM unit tests** (pure JVM, no Android):
+
+| File | Coverage |
+|---|---|
+| `PdfArtifactManagerTest.kt` | Canonical filename identity, path traversal, paper sizes, dangerous chars, source-level Application() guard. 25+ tests. |
+| `PdfArtifactFingerprintTest.kt` (FIX14-B) | Fingerprint contract: every render-driving field changes fingerprint; non-rendering fields do not. 19 tests. |
+| `PdfArtifactStalenessTest.kt` (FIX14-B) | Central staleness regression: edit invalidates; sidecar mismatch invalidates; sidecar missing invalidates; legacy PDFs invalid. 13 tests. |
+| `SaveHelperTest.kt`, `ShareHelperTest.kt`, `PrintHelperTest.kt` | Filename building, validation, MIME, FileProvider authority. |
+| `PersistenceManagerTest.kt` | JSON round-trip, malformed handling, recipient/date persistence. |
+| `SaveEditDeleteTest.kt` | `LetterDraft` id preservation through edits. |
+| `WorkflowTest.kt`, `LetterTemplateEngineTest.kt`, `QaTest.kt`, `PreviewCalculatorTest.kt`, `PdfContentCalculatorTest.kt`, `EnvelopeTest.kt`, `DateSystemTest.kt` | Pipeline correctness. |
+
+**Android instrumentation tests**:
+
+| File | Coverage |
+|---|---|
+| `PersistenceManagerCrudTest.kt` | Real `Context` round-trip: create, save, get, load, delete, clear, multi-recipient, multi-date, crash regression. **Does NOT verify artifact invalidation.** |
+
+**No tests exist for**: `PdfPrintDocumentAdapter.onWrite` byte-stability;
+`isValidArtifact` mirror-vs-production divergence; Preview vs PDF consistency
+(line/page count parity); full lifecycle on-device (Create → Save → Edit →
+Save → Preview → Share → Print → kill → reopen → Share).
+
+### Missing coverage
+
+Identified gaps (severity LOW each — not defects, but worth adding):
+
+1. **No test exercises `PersistenceManager.saveDraft` → artifact invalidation**
+   end-to-end. The chokepoint is verified by code inspection only. A
+   future refactor could silently break it. Recommendation: add an
+   instrumentation test that pre-installs a fake artifact at the canonical
+   path, calls `saveDraft`, asserts the artifact is gone.
+
+2. **`PdfPrintDocumentAdapter.onWrite` byte-stability** is not tested. The
+   adapter copies bytes verbatim (30 lines); low risk, but unverified.
+
+3. **Preview vs PDF consistency** is asserted only by sharing pipeline code.
+   No test asserts that the preview's line count matches the rendered PDF's
+   page count.
+
+4. **`isValidArtifact` mirror-vs-production divergence**: the staleness tests
+   re-implement the production validity check. A divergence (e.g., someone
+   adds a new validity check and forgets to update the mirror) would silently
+   fail to detect staleness. The mirror is small (~10 lines) and manually
+   compared; risk is low but worth a comment in code review.
+
+5. **`EXTRA_PAPER_SIZE` is declared but never set**. UI for paper-size
+   selection is incomplete. Out of scope for artifact audit; flagged for
+   product follow-up.
+
+### Security findings
+
+- FileProvider authority `${applicationId}.fileprovider` = `com.sulat.ai.fileprovider`.
+- `file_paths.xml` exposes ONLY `<cache-path name="shared_pdfs" path="shared/"/>`.
+- `ShareHelper.sharePdf` is the only call site of `FileProvider.getUriForFile`.
+  No `Uri.fromFile` anywhere; no `file://` URIs.
+- `validateArtifact` enforces `cacheDir/shared/` containment via
+  `ShareHelper.validateShareDirectory` (canonical-path prefix check, no
+  sibling-directory confusion — verified by `ShareHelperTest.shareDirectoryRejectsSiblingDirectory`).
+- `sanitizeForFilename` strips path-traversal, control chars, and dots
+  (FIX12-B). Verified by `sanitizeRemovesPathTraversal`, `filenamePreventsNullByte`,
+  etc.
+- `deleteDraft` invalidates all 4 paper-size artifacts + sidecars (FIX14-B).
+  No orphan PDFs survive a user-initiated delete.
+- Sidecar file (`<artifact>.pdf.fp`) contains only a SHA-256 hash of
+  render-driving fields — no sensitive content.
+
+**Verdict**: PASS.
+
+### Offline findings
+
+- No `import okhttp` / `import retrofit2` / `import com.google.cloud` /
+  `import com.amplitude` / `import com.firebase` / `import com.crashlytics` /
+  `import io.sentry` in `app/src/main`.
+- No `HttpURLConnection` / `URLConnection` usage.
+- No `<uses-permission android:name="android.permission.INTERNET" />` in
+  `AndroidManifest.xml`.
+- All persistence is local (`filesDir/sulat_data.json`).
+- All rendering is local (`android.graphics.pdf.PdfDocument`).
+- All sharing is local (FileProvider from `cacheDir/shared/`).
+- All printing is local (Android Print Framework streams local bytes).
+
+**Verdict**: PASS — offline-by-construction.
+
+### Confirmed defects
+
+**None.** This audit found NO new defects beyond what FIX14-B already
+addressed. The FIX13/FIX14 HIGH-severity staleness defect is closed and
+remains closed across the full user workflow including Save, Edit, Preview,
+Share, Print, Reopen, process death, paper-size, multi-recipient, and content
+edits.
+
+### Severity summary
+
+| Finding | Severity | Status |
+|---|---|---|
+| FIX13/FIX14 staleness (closed by FIX14-B) | HIGH | RESOLVED |
+| Orphan PDF on delete (closed by FIX14-B) | MEDIUM | RESOLVED |
+| Chokepoint invalidation has no on-device test | LOW | OPEN (recommendation: add instrumentation test) |
+| `PdfPrintDocumentAdapter.onWrite` unverified | LOW | OPEN (recommendation: unit test for byte-stable copy) |
+| Preview vs PDF consistency unverified | LOW | OPEN (recommendation: count-parity test) |
+| isValidArtifact mirror divergence risk | LOW | OPEN (mitigated by code review) |
+| `EXTRA_PAPER_SIZE` never set | LOW (UX) | OPEN (product follow-up; not an artifact defect) |
+| Legacy helpers (`SaveHelper.generatePdf`, etc.) | LOW (cleanup debt) | OPEN (documented in FIX13) |
+
+### Recommended action
+
+**No production code changes required.** The artifact identity and validity
+contracts are sound across the full workflow. The recommended additions
+(test coverage items 1-4) are nice-to-have but not blocking.
+
+If a future fix is proposed, the highest-value test to add is
+**item 1: an instrumentation test that exercises `PersistenceManager.saveDraft`
+→ artifact invalidation**. This would lock in the chokepoint invariant.
+
+### Whether production code was changed
+
+**No.** This audit commit contains ONLY this report (appended to `repo.md`).
+No production source, test source, Gradle, manifest, workflow, or dependency
+was modified. The audit was performed by reading the source files and
+cross-referencing call sites.
+
+### FIX15 verdict
+
+**PASS WITH FINDINGS** — no defects discovered; minor coverage gaps documented
+as LOW severity and recommended for future hardening.
+
+---
