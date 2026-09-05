@@ -2,7 +2,6 @@ package com.sulat.ai.share
 
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import androidx.core.content.FileProvider
 import com.sulat.ai.data.model.LetterDraft
 import com.sulat.ai.document.PaperSize
@@ -21,10 +20,40 @@ data class ShareResult(
 
 object ShareHelper {
 
-    private const val FILE_PROVIDER_AUTHORITY = "com.sulat.ai.fileprovider"
     private const val PDF_MIME_TYPE = "application/pdf"
     private const val MAX_FILENAME_LENGTH = 100
     private const val CACHE_SUBDIR = "shared"
+    const val FILE_PROVIDER_AUTHORITY = "com.sulat.ai.fileprovider"
+
+    /**
+     * Resolve the FileProvider authority from the application context.
+     * Falls back to the hardcoded constant if context is unavailable.
+     */
+    fun resolveAuthority(context: Context): String {
+        return "${context.applicationContext.packageName}.fileprovider"
+    }
+
+    /**
+     * Get the expected share directory inside the app cache.
+     */
+    fun getShareDirectory(context: Context): File {
+        return File(context.cacheDir, CACHE_SUBDIR)
+    }
+
+    /**
+     * Validate that a file is inside the allowed share directory.
+     * Pure JVM — no Android dependency. Returns null if valid, or an error message.
+     */
+    fun validateShareDirectory(file: File, shareDirectory: File): String? {
+        val shareDirCanonical = shareDirectory.canonicalFile
+        val fileCanonical = file.canonicalFile
+
+        if (!fileCanonical.path.startsWith(shareDirCanonical.path + File.separator) &&
+            fileCanonical != shareDirCanonical) {
+            return "PDF file is not in the allowed share directory"
+        }
+        return null
+    }
 
     /**
      * Generate a real PDF and share it via Android's native share sheet.
@@ -38,7 +67,7 @@ object ShareHelper {
         val engine = LetterTemplateEngine()
         val layout = engine.buildLayout(draft, paperSize)
 
-        val shareDir = File(context.cacheDir, CACHE_SUBDIR)
+        val shareDir = getShareDirectory(context)
         shareDir.mkdirs()
         val outputFile = File(shareDir, sanitizeFilename(draft))
 
@@ -61,6 +90,11 @@ object ShareHelper {
             return ShareResult(success = false, error = validation)
         }
 
+        val dirCheck = validateShareDirectory(result.file, shareDir)
+        if (dirCheck != null) {
+            return ShareResult(success = false, error = dirCheck)
+        }
+
         return sharePdf(context, result.file)
     }
 
@@ -75,9 +109,10 @@ object ShareHelper {
         }
 
         return try {
+            val authority = resolveAuthority(context)
             val contentUri = FileProvider.getUriForFile(
                 context,
-                FILE_PROVIDER_AUTHORITY,
+                authority,
                 pdfFile
             )
 

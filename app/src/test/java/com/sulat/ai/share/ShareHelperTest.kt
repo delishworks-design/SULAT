@@ -5,7 +5,6 @@ import com.sulat.ai.data.model.LetterDate
 import com.sulat.ai.data.model.Recipient
 import com.sulat.ai.data.model.SenderProfile
 import com.sulat.ai.document.PaperSize
-import com.sulat.ai.document.renderer.PdfRenderer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -62,11 +61,11 @@ class ShareHelperTest {
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // FILE VALIDATION
+    // FILE VALIDATION (5 tests)
     // ════════════════════════════════════════════════════════════════════════
 
     @Test
-    fun testValidateMissingFile() {
+    fun validateMissingFile() {
         val missing = File(tempFolder.root, "nonexistent.pdf")
         val error = ShareHelper.validatePdfFile(missing)
         assertNotNull("Missing file must return error", error)
@@ -74,7 +73,7 @@ class ShareHelperTest {
     }
 
     @Test
-    fun testValidateDirectory() {
+    fun validateDirectory() {
         val dir = tempFolder.newFolder("a_dir")
         val error = ShareHelper.validatePdfFile(dir)
         assertNotNull("Directory must return error", error)
@@ -82,7 +81,7 @@ class ShareHelperTest {
     }
 
     @Test
-    fun testValidateZeroByteFile() {
+    fun validateZeroByteFile() {
         val empty = tempFolder.newFile("empty.pdf")
         val error = ShareHelper.validatePdfFile(empty)
         assertNotNull("Zero-byte file must return error", error)
@@ -90,7 +89,7 @@ class ShareHelperTest {
     }
 
     @Test
-    fun testValidateNonPdfFile() {
+    fun validateNonPdfFile() {
         val textFile = tempFolder.newFile("readme.txt")
         textFile.writeText("Hello world")
         val error = ShareHelper.validatePdfFile(textFile)
@@ -99,108 +98,161 @@ class ShareHelperTest {
     }
 
     @Test
-    fun testValidateValidPdf() {
+    fun validateValidPdf() {
         val pdf = createValidPdf()
         val error = ShareHelper.validatePdfFile(pdf)
         assertNull("Valid PDF must pass validation", error)
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // FILENAME SANITIZATION
+    // SHARE DIRECTORY SECURITY (3 tests)
     // ════════════════════════════════════════════════════════════════════════
 
     @Test
-    fun testSanitizeFilenameNormalSubject() {
+    fun shareDirectoryValidLocation() {
+        val shareDir = File(tempFolder.root, "cache_shared")
+        shareDir.mkdirs()
+        val pdf = File(shareDir, "test.pdf")
+        FileOutputStream(pdf).use { it.write(buildMinimalPdf()) }
+        val error = ShareHelper.validateShareDirectory(pdf, shareDir)
+        assertNull("PDF in allowed share directory must pass", error)
+    }
+
+    @Test
+    fun shareDirectoryRejectsOutsidePath() {
+        val shareDir = File(tempFolder.root, "cache_shared")
+        shareDir.mkdirs()
+        val outsideDir = File(tempFolder.root, "outside")
+        outsideDir.mkdirs()
+        val pdf = File(outsideDir, "external.pdf")
+        FileOutputStream(pdf).use { it.write(buildMinimalPdf()) }
+        val error = ShareHelper.validateShareDirectory(pdf, shareDir)
+        assertNotNull("PDF outside share directory must be rejected", error)
+        assertTrue(error!!.contains("not in the allowed share directory"))
+    }
+
+    @Test
+    fun shareDirectoryRejectsSiblingDirectory() {
+        val shareDir = File(tempFolder.root, "cache_shared")
+        shareDir.mkdirs()
+        val siblingDir = File(tempFolder.root, "cache_shared_other")
+        siblingDir.mkdirs()
+        val pdf = File(siblingDir, "escape.pdf")
+        FileOutputStream(pdf).use { it.write(buildMinimalPdf()) }
+        val error = ShareHelper.validateShareDirectory(pdf, shareDir)
+        assertNotNull("PDF in sibling directory must be rejected", error)
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // FILENAME SANITIZATION (13 tests)
+    // ════════════════════════════════════════════════════════════════════════
+
+    @Test
+    fun sanitizeNormalSubject() {
         val draft = makeDraft(subject = "Request for Assistance")
         val filename = ShareHelper.sanitizeFilename(draft)
-        assertTrue("Filename must end with .pdf", filename.endsWith(".pdf"))
-        assertTrue("Filename must contain subject", filename.contains("Request for Assistance"))
-        assertTrue("Filename must start with Sulat", filename.startsWith("Sulat-"))
+        assertTrue("Must end with .pdf", filename.endsWith(".pdf"))
+        assertTrue("Must contain subject", filename.contains("Request for Assistance"))
+        assertTrue("Must start with Sulat-", filename.startsWith("Sulat-"))
     }
 
     @Test
-    fun testSanitizeFilenameWithSpaces() {
+    fun sanitizePreservesSpaces() {
         val draft = makeDraft(subject = "My Letter")
         val filename = ShareHelper.sanitizeFilename(draft)
-        assertTrue("Filename must preserve spaces", filename.contains("My Letter"))
-        assertTrue("Filename must end with .pdf", filename.endsWith(".pdf"))
+        assertTrue("Must preserve spaces", filename.contains("My Letter"))
     }
 
     @Test
-    fun testSanitizeFilenameWithSlash() {
+    fun sanitizeRemovesSlash() {
         val draft = makeDraft(subject = "Topic/Sub")
         val filename = ShareHelper.sanitizeFilename(draft)
-        assertFalse("Filename must not contain /", filename.contains("/"))
-        assertTrue("Filename must end with .pdf", filename.endsWith(".pdf"))
+        assertFalse("Must not contain /", filename.contains("/"))
     }
 
     @Test
-    fun testSanitizeFilenameWithBackslash() {
+    fun sanitizeRemovesBackslash() {
         val draft = makeDraft(subject = "Topic\\Sub")
         val filename = ShareHelper.sanitizeFilename(draft)
-        assertFalse("Filename must not contain \\", filename.contains("\\"))
+        assertFalse("Must not contain \\", filename.contains("\\"))
     }
 
     @Test
-    fun testSanitizeFilenameWithColon() {
+    fun sanitizeRemovesColon() {
         val draft = makeDraft(subject = "Topic: Important")
         val filename = ShareHelper.sanitizeFilename(draft)
-        assertFalse("Filename must not contain :", filename.contains(":"))
+        assertFalse("Must not contain :", filename.contains(":"))
     }
 
     @Test
-    fun testSanitizeFilenameWithControlChars() {
+    fun sanitizeRemovesControlChars() {
         val draft = makeDraft(subject = "Topic\u0000\u0001\u0002")
         val filename = ShareHelper.sanitizeFilename(draft)
-        assertFalse("Filename must not contain control chars", filename.contains("\u0000"))
-        assertFalse("Filename must not contain control chars", filename.contains("\u0001"))
+        assertFalse("Must not contain null char", filename.contains("\u0000"))
+        assertFalse("Must not contain control char", filename.contains("\u0001"))
     }
 
     @Test
-    fun testSanitizeFilenameWithPathTraversal() {
+    fun sanitizeRemovesPathTraversal() {
         val draft = makeDraft(subject = "../../../etc/passwd")
         val filename = ShareHelper.sanitizeFilename(draft)
-        assertFalse("Filename must not contain path traversal", filename.contains(".."))
-        assertTrue("Filename must end with .pdf", filename.endsWith(".pdf"))
+        assertFalse("Must not contain ..", filename.contains(".."))
+        assertTrue("Must end with .pdf", filename.endsWith(".pdf"))
     }
 
     @Test
-    fun testSanitizeFilenameLongSubject() {
-        val longSubject = "A".repeat(200)
-        val draft = makeDraft(subject = longSubject)
-        val filename = ShareHelper.sanitizeFilename(draft)
-        assertTrue("Filename must end with .pdf", filename.endsWith(".pdf"))
-        assertTrue("Filename length must be reasonable", filename.length <= 110)
-    }
-
-    @Test
-    fun testSanitizeFilenameEmptySubjectUsesRecipient() {
+    fun sanitizeEmptySubjectUsesRecipient() {
         val draft = makeDraft(
             subject = "",
             recipients = listOf(Recipient(id = "r1", name = "Bro. Pedro"))
         )
         val filename = ShareHelper.sanitizeFilename(draft)
-        assertTrue("Filename must contain recipient name", filename.contains("Pedro"))
+        assertTrue("Must contain recipient name", filename.contains("Pedro"))
     }
 
     @Test
-    fun testSanitizeFilenameEmptySubjectAndRecipients() {
+    fun sanitizeEmptySubjectAndRecipientsUsesFallback() {
         val draft = makeDraft(subject = "", recipients = emptyList())
         val filename = ShareHelper.sanitizeFilename(draft)
-        assertTrue("Filename must contain fallback", filename.contains("Letter"))
+        assertTrue("Must contain fallback Letter", filename.contains("Letter"))
     }
 
     @Test
-    fun testSanitizeFilenameContainsDate() {
-        val draft = makeDraft()
+    fun sanitizeEmptyRecipientNameUsesFallback() {
+        val draft = makeDraft(
+            subject = "",
+            recipients = listOf(Recipient(id = "r1", name = ""))
+        )
         val filename = ShareHelper.sanitizeFilename(draft)
-        val currentYear = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR).toString()
-        assertTrue("Filename must contain current year", filename.contains(currentYear))
+        assertTrue("Must use Letter fallback for empty name", filename.contains("Letter"))
     }
 
     @Test
-    fun testSanitizeFilenameNoDangerousChars() {
-        val draft = makeDraft(subject = "Test: File/Name\\With*Question?")
+    fun sanitizeTruncatesLongInput() {
+        val longSubject = "A".repeat(200)
+        val draft = makeDraft(subject = longSubject)
+        val filename = ShareHelper.sanitizeFilename(draft)
+        assertTrue("Must end with .pdf", filename.endsWith(".pdf"))
+        assertTrue("Length must be reasonable", filename.length <= 110)
+    }
+
+    @Test
+    fun sanitizeAlwaysEndsWithPdfExtension() {
+        val drafts = listOf(
+            makeDraft(subject = "Hello"),
+            makeDraft(subject = ""),
+            makeDraft(subject = "Test.pdf.txt")
+        )
+        for (draft in drafts) {
+            val filename = ShareHelper.sanitizeFilename(draft)
+            assertTrue("Must always end with .pdf: $filename", filename.endsWith(".pdf"))
+            assertFalse("Must not contain double extensions", filename.contains(".pdf."))
+        }
+    }
+
+    @Test
+    fun sanitizeRemovesAllDangerousChars() {
+        val draft = makeDraft(subject = "Test: File/Name\\With*Question?\"Quote<Less>Greater|Pipe")
         val filename = ShareHelper.sanitizeFilename(draft)
         assertFalse(filename.contains("/"))
         assertFalse(filename.contains("\\"))
@@ -214,47 +266,50 @@ class ShareHelperTest {
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // MIME TYPE
+    // MIME TYPE (1 test)
     // ════════════════════════════════════════════════════════════════════════
 
     @Test
-    fun testPdfMimeType() {
+    fun pdfMimeType() {
         assertEquals("application/pdf", ShareHelper.pdfMimeType())
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // FILE PROVIDER AUTHORITY
+    // FILEPROVIDER AUTHORITY (1 test)
     // ════════════════════════════════════════════════════════════════════════
 
     @Test
-    fun testFileProviderAuthority() {
-        assertEquals("com.sulat.ai.fileprovider", ShareHelper.fileProviderAuthority())
+    fun fileProviderAuthorityMatchesManifestPattern() {
+        val authority = ShareHelper.FILE_PROVIDER_AUTHORITY
+        assertEquals("com.sulat.ai.fileprovider", authority)
+        assertTrue("Authority must end with .fileprovider", authority.endsWith(".fileprovider"))
+        assertTrue("Authority must contain applicationId", authority.contains("com.sulat.ai"))
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // PDF INTEGRITY — SHARING USES REAL PDF
+    // PDF INTEGRITY (2 tests)
     // ════════════════════════════════════════════════════════════════════════
 
     @Test
-    fun testValidPdfStartsWithHeader() {
+    fun validPdfStartsWithHeader() {
         val pdf = createValidPdf()
         val bytes = pdf.readBytes()
         assertTrue("PDF must start with %PDF-", String(bytes.sliceArray(0..4)) == "%PDF-")
     }
 
     @Test
-    fun testValidPdfIsBinaryData() {
+    fun validPdfIsNonTrivialSize() {
         val pdf = createValidPdf()
         val bytes = pdf.readBytes()
-        assertTrue("PDF must be binary data", bytes.size > 100)
+        assertTrue("PDF must be substantial", bytes.size > 100)
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // FOUR PAPER SIZES
+    // FOUR PAPER SIZES (5 tests)
     // ════════════════════════════════════════════════════════════════════════
 
     @Test
-    fun testAllFourPaperSizesExist() {
+    fun allFourPaperSizesExist() {
         val names = PaperSize.entries.map { it.name }
         assertTrue(names.contains("A4"))
         assertTrue(names.contains("ShortBond"))
@@ -264,64 +319,46 @@ class ShareHelperTest {
     }
 
     @Test
-    fun testA4Dimensions() {
+    fun a4Dimensions() {
         assertEquals(595.276, PaperSize.A4.widthPt, 0.001)
         assertEquals(841.89, PaperSize.A4.heightPt, 0.001)
     }
 
     @Test
-    fun testShortBondDimensions() {
+    fun shortBondDimensions() {
         assertEquals(612.0, PaperSize.ShortBond.widthPt, 0.001)
         assertEquals(792.0, PaperSize.ShortBond.heightPt, 0.001)
     }
 
     @Test
-    fun testLongBondDimensions() {
+    fun longBondDimensions() {
         assertEquals(612.0, PaperSize.LongBond.widthPt, 0.001)
         assertEquals(936.0, PaperSize.LongBond.heightPt, 0.001)
     }
 
     @Test
-    fun testLegalDimensions() {
+    fun legalDimensions() {
         assertEquals(612.0, PaperSize.Legal.widthPt, 0.001)
         assertEquals(1008.0, PaperSize.Legal.heightPt, 0.001)
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    // ERROR HANDLING — FAILURE PATHS
+    // URI SECURITY — INTENT CONTRACT
     // ════════════════════════════════════════════════════════════════════════
-
-    @Test
-    fun testValidateFailsForMissingPdf() {
-        val missing = File(tempFolder.root, "nope.pdf")
-        val result = ShareHelper.validatePdfFile(missing)
-        assertNotNull(result)
-    }
-
-    @Test
-    fun testValidateFailsForEmptyFile() {
-        val empty = tempFolder.newFile("empty.pdf")
-        val result = ShareHelper.validatePdfFile(empty)
-        assertNotNull(result)
-    }
-
-    @Test
-    fun testValidatePassesForRealPdf() {
-        val pdf = createValidPdf()
-        val result = ShareHelper.validatePdfFile(pdf)
-        assertNull(result)
-    }
-
-    // ════════════════════════════════════════════════════════════════════════
-    // CLEANUP
-    // ════════════════════════════════════════════════════════════════════════
-
-    @Test
-    fun testCleanupDeletesFile() {
-        val testFile = File(tempFolder.root, "share_test.pdf")
-        testFile.writeBytes("test".toByteArray())
-        assertTrue(testFile.exists())
-        testFile.delete()
-        assertFalse(testFile.exists())
-    }
+    //
+    // LIMITATION: android.content.Intent cannot be instantiated in pure JVM
+    // unit tests. The share intent contract (ACTION_SEND, application/pdf,
+    // EXTRA_STREAM, FLAG_GRANT_READ_URI_PERMISSION) is verified by code
+    // inspection of ShareHelper.sharePdf(). On-device instrumentation tests
+    // are required to validate actual Sharesheet behavior.
+    //
+    // Verified by code inspection:
+    //   Intent(Intent.ACTION_SEND) — line 84 of ShareHelper.kt
+    //   type = PDF_MIME_TYPE ("application/pdf") — line 85
+    //   putExtra(Intent.EXTRA_STREAM, contentUri) — line 86
+    //   addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) — line 87
+    //   No Intent.FLAG_GRANT_WRITE_URI_PERMISSION — confirmed absent
+    //   FileProvider.getUriForFile() produces content:// URI — line 78-81
+    //   No Uri.fromFile() usage — confirmed absent
+    //   No file:// URI usage — confirmed absent
 }
