@@ -167,6 +167,49 @@ object PrintHelper {
     }
 
     /**
+     * Launch the Android Print Framework with an already-generated PDF file.
+     * Does NOT regenerate a letter — uses the provided PDF as-is.
+     * The envelope PDF must be the exact file passed into the adapter.
+     */
+    fun printExistingPdf(
+        context: Context,
+        pdfFile: File,
+        paperSize: PaperSize = PaperSize.A4,
+        jobName: String = "Sulat-Document"
+    ): PrintResult {
+        val validation = validateExistingPdf(pdfFile)
+        if (validation != null) {
+            return PrintResult(success = false, error = validation)
+        }
+
+        val printManager = context.getSystemService(Context.PRINT_SERVICE) as PrintManager
+        val adapter = PdfPrintDocumentAdapter(pdfFile, jobName)
+        val attributes = buildPrintAttributes(paperSize)
+        printManager.print(jobName, adapter, attributes)
+
+        return PrintResult(success = true, pdfFile = pdfFile)
+    }
+
+    /**
+     * Validate an existing PDF file for printing. Returns null if valid, or an error message.
+     */
+    fun validateExistingPdf(pdfFile: File): String? {
+        if (!pdfFile.exists()) {
+            return "PDF file does not exist"
+        }
+        if (!pdfFile.isFile) {
+            return "Path is not a regular file"
+        }
+        if (pdfFile.length() == 0L) {
+            return "PDF file is empty"
+        }
+        if (!PdfRenderer.isValidPdfFile(pdfFile)) {
+            return "File is not a valid PDF"
+        }
+        return null
+    }
+
+    /**
      * Clean up temporary print PDF files.
      */
     fun cleanupPrintPdf(context: Context, draftId: String) {
