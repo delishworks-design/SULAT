@@ -164,7 +164,7 @@ class PdfContentCalculator(
         addSpacer(PdfTextRole.CLOSING.style.fontSizePt * 2)
         if (sender.signature.isNotEmpty()) {
             addLine(sender.signature, PdfTextRole.CLOSING)
-            addSpacer()
+            addSpacer(PdfTextRole.CLOSING.style.fontSizePt)
         }
         if (sender.name.isNotEmpty()) {
             addLine(sender.name, PdfTextRole.SENDER_NAME)
@@ -183,7 +183,7 @@ class PdfContentCalculator(
         }
     }
 
-    private fun estimateCharsPerLine(availableWidthPt: Double, fontSizePt: Float): Int {
+    private fun estimateCharsPerLine(availableWidthPt: Double, fontSizePt: Double): Int {
         val avgCharWidth = fontSizePt * 0.55
         return (availableWidthPt / avgCharWidth).toInt().coerceAtLeast(20)
     }
